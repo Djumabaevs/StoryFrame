@@ -252,3 +252,68 @@ extension Angle {
         return .degrees(degrees)
     }
 }
+
+// MARK: - Canvas Coordinate System
+/// Helper for converting between screen coordinates and canvas (page) coordinates
+struct CanvasCoordinateSystem {
+    let zoomScale: CGFloat
+    let panOffset: CGSize
+    let pageSize: CGSize
+    let viewSize: CGSize
+
+    /// The combined display scale (includes fit-to-screen and user zoom)
+    var displayScale: CGFloat {
+        let fitScale = min(
+            (viewSize.width - 40) / pageSize.width,
+            (viewSize.height - 40) / pageSize.height
+        )
+        return fitScale * zoomScale
+    }
+
+    /// Convert screen touch point to canvas (page) coordinates
+    /// Use this when processing touch/drag gestures to get the position in page space
+    func screenToCanvas(_ screenPoint: CGPoint) -> CGPoint {
+        return CGPoint(
+            x: screenPoint.x / displayScale,
+            y: screenPoint.y / displayScale
+        )
+    }
+
+    /// Convert canvas (page) coordinates to screen position for rendering
+    /// Use this when positioning elements on screen
+    func canvasToScreen(_ canvasPoint: CGPoint) -> CGPoint {
+        return CGPoint(
+            x: canvasPoint.x * displayScale,
+            y: canvasPoint.y * displayScale
+        )
+    }
+
+    /// Convert canvas rect to screen rect (for selection boxes, hit testing)
+    func canvasRectToScreen(_ canvasRect: CGRect) -> CGRect {
+        return canvasRect.scaled(by: displayScale)
+    }
+
+    /// Get the size of the canvas in screen coordinates
+    var screenCanvasSize: CGSize {
+        CGSize(
+            width: pageSize.width * displayScale,
+            height: pageSize.height * displayScale
+        )
+    }
+
+    /// Get visible canvas area in page coordinates
+    var visibleCanvasRect: CGRect {
+        let topLeft = screenToCanvas(.zero)
+        let size = CGSize(
+            width: viewSize.width / displayScale,
+            height: viewSize.height / displayScale
+        )
+        return CGRect(origin: topLeft, size: size)
+    }
+
+    /// Center point of visible canvas in page coordinates (for placing new elements)
+    var visibleCanvasCenter: CGPoint {
+        let rect = visibleCanvasRect
+        return CGPoint(x: rect.midX, y: rect.midY)
+    }
+}

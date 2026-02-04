@@ -35,30 +35,56 @@ struct PageEditorView: View {
         return project.sortedPages[currentPageIndex]
     }
 
+    var isPortrait: Bool {
+        UIScreen.main.bounds.height > UIScreen.main.bounds.width
+    }
+
     var body: some View {
         GeometryReader { geometry in
+            let isCompact = geometry.size.width < 700
+
             ZStack {
                 Color(.systemGroupedBackground)
                     .ignoresSafeArea()
 
-                HStack(spacing: 0) {
-                    toolRail
-
+                if isCompact {
+                    // Vertical/Portrait layout
                     VStack(spacing: 0) {
                         topToolbar
 
                         canvasArea(geometry: geometry)
 
+                        // Bottom toolbar with tools
+                        bottomToolBar
+
                         contextBar
                     }
+                } else {
+                    // Horizontal/Landscape layout
+                    HStack(spacing: 0) {
+                        toolRail
 
-                    if showRightSidebar {
-                        rightSidebar
+                        VStack(spacing: 0) {
+                            topToolbar
+
+                            canvasArea(geometry: geometry)
+
+                            contextBar
+                        }
+
+                        if showRightSidebar {
+                            rightSidebar
+                        }
                     }
                 }
 
                 if showPagesManager {
                     pagesManagerOverlay
+                }
+
+                // Floating sidebar for portrait mode
+                if isCompact && showRightSidebar {
+                    floatingSidebar
                 }
             }
         }
@@ -89,10 +115,17 @@ struct PageEditorView: View {
             }
         }
         .sheet(isPresented: $showAssetLibrary) {
-            AssetLibraryView()
+            AssetLibraryView { asset in
+                addAssetToCanvas(asset)
+            }
         }
         .sheet(isPresented: $showExportSheet) {
             ExportSheet(project: project, currentPage: currentPage)
+        }
+        .fullScreenCover(isPresented: $showPreview) {
+            ComicPreviewView(project: project, startingPage: currentPageIndex) {
+                showPreview = false
+            }
         }
         .onAppear {
             if project.pages.isEmpty {
@@ -103,7 +136,7 @@ struct PageEditorView: View {
         }
     }
 
-    // MARK: - Tool Rail
+    // MARK: - Tool Rail (Landscape)
 
     private var toolRail: some View {
         VStack(spacing: 4) {
@@ -134,6 +167,80 @@ struct PageEditorView: View {
         .padding(.vertical, 8)
         .frame(width: 56)
         .background(Color(.systemBackground))
+    }
+
+    // MARK: - Bottom Tool Bar (Portrait)
+
+    private var bottomToolBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(EditorTool.allCases) { tool in
+                    Button {
+                        selectedTool = tool
+                        HapticManager.shared.toolSelected()
+                    } label: {
+                        VStack(spacing: 2) {
+                            Image(systemName: tool.icon)
+                                .font(.title3)
+                            Text(tool.displayName)
+                                .font(.system(size: 9))
+                        }
+                        .frame(width: 50, height: 50)
+                        .background(selectedTool == tool ? Color(hex: "#FF6B35").opacity(0.2) : Color.clear)
+                        .foregroundStyle(selectedTool == tool ? Color(hex: "#FF6B35") : .primary)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Divider()
+                    .frame(height: 40)
+
+                Button {
+                    showAssetLibrary = true
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: "folder")
+                            .font(.title3)
+                        Text("Assets")
+                            .font(.system(size: 9))
+                    }
+                    .frame(width: 50, height: 50)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal)
+        }
+        .frame(height: 60)
+        .background(Color(.systemBackground))
+    }
+
+    // MARK: - Floating Sidebar (Portrait)
+
+    private var floatingSidebar: some View {
+        HStack {
+            Spacer()
+
+            VStack {
+                Spacer()
+
+                RightSidebarView(
+                    page: currentPage,
+                    selectedPanel: $selectedPanel,
+                    currentColor: $currentColor,
+                    brushSize: $brushSize
+                )
+                .frame(width: 250, height: 400)
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 4)
+                .padding()
+
+                Spacer()
+            }
+        }
+        .transition(.move(edge: .trailing))
+        .animation(.spring(response: 0.3), value: showRightSidebar)
     }
 
     // MARK: - Top Toolbar
@@ -172,9 +279,9 @@ struct PageEditorView: View {
             Spacer()
 
             Button {
-                showPreview.toggle()
+                showPreview = true
             } label: {
-                Image(systemName: showPreview ? "eye.fill" : "eye")
+                Image(systemName: "eye")
             }
 
             Button {
@@ -241,12 +348,28 @@ struct PageEditorView: View {
                         try? modelContext.save()
                         HapticManager.shared.panelCreated()
                     },
-                    onBubbleCreated: { bubble in
-                        if let panel = selectedPanel {
+                    onBubbleCreated: { bubble, targetPanel in
+                        // Add bubble to target panel or first panel
+                        if let panel = targetPanel ?? page.sortedPanels.first {
                             panel.bubbles.append(bubble)
                             selectedBubble = bubble
+                            selectedPanel = panel
                             try? modelContext.save()
                             HapticManager.shared.bubbleCreated()
+                            // Open editor immediately
+                            showBubbleEditor = true
+                        }
+                    },
+                    onTextCreated: { textElement, targetPanel in
+                        // Add text to target panel or first panel
+                        if let panel = targetPanel ?? page.sortedPanels.first {
+                            panel.textElements.append(textElement)
+                            selectedTextElement = textElement
+                            selectedPanel = panel
+                            try? modelContext.save()
+                            HapticManager.shared.tap()
+                            // Open editor immediately
+                            showTextEditor = true
                         }
                     },
                     onBubbleTapped: { bubble in
@@ -256,6 +379,26 @@ struct PageEditorView: View {
                     onTextTapped: { textElement in
                         selectedTextElement = textElement
                         showTextEditor = true
+                    },
+                    onShapeCreated: { rect in
+                        // Create a panel from the shape
+                        let rectPoints = [
+                            CGPoint(x: rect.minX, y: rect.minY),
+                            CGPoint(x: rect.maxX, y: rect.minY),
+                            CGPoint(x: rect.maxX, y: rect.maxY),
+                            CGPoint(x: rect.minX, y: rect.maxY)
+                        ]
+                        let panel = Panel(orderIndex: page.panels.count, framePoints: rectPoints)
+                        page.panels.append(panel)
+                        selectedPanel = panel
+                        try? modelContext.save()
+                        HapticManager.shared.panelCreated()
+                    },
+                    onAssetRequested: {
+                        showAssetLibrary = true
+                    },
+                    onElementMoved: {
+                        try? modelContext.save()
                     }
                 )
             } else {
@@ -351,9 +494,10 @@ struct PageEditorView: View {
 
     private func generateThumbnail() {
         // Generate thumbnail from first page
-        if let firstPage = project.sortedPages.first {
-            // Implementation would render the page to an image
-            // For now, we'll skip this as it requires more complex rendering
+        guard let page = project.sortedPages.first else { return }
+        let exporter = ComicExporter()
+        if let image = exporter.exportPage(page, project: project, scale: 0.5) {
+            project.coverImageData = image.pngData()
         }
     }
 
@@ -405,6 +549,239 @@ struct PageEditorView: View {
             selectedPanel = nil
             try? modelContext.save()
         }
+    }
+
+    private func addAssetToCanvas(_ asset: BuiltInAsset) {
+        guard let page = currentPage else { return }
+
+        // Get target panel (selected panel or first panel)
+        var targetPanel = selectedPanel ?? page.sortedPanels.first
+
+        // If no panel exists, create one covering the full page first
+        if targetPanel == nil {
+            let fullPagePoints = [
+                CGPoint(x: 20, y: 20),
+                CGPoint(x: project.pageWidth - 20, y: 20),
+                CGPoint(x: project.pageWidth - 20, y: project.pageHeight - 20),
+                CGPoint(x: 20, y: project.pageHeight - 20)
+            ]
+            let newPanel = Panel(orderIndex: 0, framePoints: fullPagePoints)
+            page.panels.append(newPanel)
+            targetPanel = newPanel
+            selectedPanel = newPanel
+        }
+
+        guard let panel = targetPanel else { return }
+
+        addAssetToPanel(asset, panel: panel)
+
+        // Ensure the panel is selected so the user can see the asset was added
+        selectedPanel = panel
+
+        try? modelContext.save()
+        HapticManager.shared.tap()
+    }
+
+    private func addAssetToPanel(_ asset: BuiltInAsset, panel: Panel) {
+        let panelCenter = panel.boundingRect.center
+
+        switch asset.category {
+        case .soundeffects:
+            // Create a text element for sound effects
+            let textElement = TextElement(
+                text: asset.name,
+                position: panelCenter
+            )
+            textElement.isSoundEffect = true
+            textElement.fontSize = 36
+            textElement.fontColor = "#FF0000"
+            textElement.effect = "shadow"
+            panel.textElements.append(textElement)
+            selectedTextElement = textElement
+
+        case .emotions:
+            // Create emotion symbols as text elements
+            let emotionText = getEmotionText(for: asset.name)
+            let textElement = TextElement(
+                text: emotionText,
+                position: panelCenter
+            )
+            textElement.fontSize = 48
+            textElement.fontColor = "#000000"
+            textElement.effect = "none"
+            panel.textElements.append(textElement)
+            selectedTextElement = textElement
+
+        case .speedlines, .effects, .screentones, .backgrounds:
+            // For visual effects that don't have dedicated storage yet,
+            // add a placeholder text element indicating the effect
+            // In a full implementation, these would be stored as panel properties
+            let textElement = TextElement(
+                text: "[\(asset.name)]",
+                position: panelCenter
+            )
+            textElement.fontSize = 28
+            textElement.fontColor = "#333333"
+            textElement.effect = "shadow"
+            panel.textElements.append(textElement)
+            selectedTextElement = textElement
+        }
+    }
+
+    private func getEmotionText(for name: String) -> String {
+        switch name.lowercased() {
+        case "sweat drop": return "💧"
+        case "anger veins": return "💢"
+        case "heart": return "❤️"
+        case "question": return "❓"
+        case "exclamation": return "❗"
+        case "zzz": return "💤"
+        default: return "✨"
+        }
+    }
+}
+
+// MARK: - Comic Preview View
+
+struct ComicPreviewView: View {
+    let project: ComicProject
+    let startingPage: Int
+    let onDismiss: () -> Void
+
+    @State private var currentPageIndex: Int
+    @GestureState private var dragOffset: CGFloat = 0
+
+    init(project: ComicProject, startingPage: Int, onDismiss: @escaping () -> Void) {
+        self.project = project
+        self.startingPage = startingPage
+        self.onDismiss = onDismiss
+        _currentPageIndex = State(initialValue: startingPage)
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            // Page viewer with swipe
+            TabView(selection: $currentPageIndex) {
+                ForEach(Array(project.sortedPages.enumerated()), id: \.element.id) { index, page in
+                    PreviewPageView(page: page, project: project)
+                        .tag(index)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .automatic))
+
+            // Close button
+            VStack {
+                HStack {
+                    Button {
+                        onDismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title)
+                            .foregroundStyle(.white.opacity(0.8))
+                            .padding()
+                    }
+
+                    Spacer()
+
+                    Text("Page \(currentPageIndex + 1) of \(project.pages.count)")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .padding()
+                }
+
+                Spacer()
+            }
+        }
+        .statusBarHidden()
+    }
+}
+
+struct PreviewPageView: View {
+    let page: ComicPage
+    let project: ComicProject
+
+    var body: some View {
+        GeometryReader { geometry in
+            let pageSize = CGSize(width: project.pageWidth, height: project.pageHeight)
+            let fitScale = min(
+                geometry.size.width / pageSize.width,
+                geometry.size.height / pageSize.height
+            ) * 0.95
+            let canvasWidth = pageSize.width * fitScale
+            let canvasHeight = pageSize.height * fitScale
+
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+
+                    // Render the page - all elements in same coordinate space
+                    ZStack {
+                        // White background
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.white)
+                            .frame(width: canvasWidth, height: canvasHeight)
+                            .shadow(color: .black.opacity(0.5), radius: 20, x: 0, y: 10)
+
+                        // Panels
+                        Canvas { context, size in
+                            for panel in page.sortedPanels {
+                                drawPanel(panel, in: context, scale: fitScale)
+                            }
+                        }
+                        .frame(width: canvasWidth, height: canvasHeight)
+
+                        // Drawing layers
+                        ForEach(page.sortedLayers) { layer in
+                            if layer.isVisible {
+                                DrawingLayerPreview(layer: layer, displayScale: fitScale, pageSize: pageSize)
+                            }
+                        }
+
+                        // Bubbles and text - wrapped in a container with proper frame
+                        ZStack {
+                            ForEach(page.sortedPanels) { panel in
+                                ForEach(panel.bubbles) { bubble in
+                                    BubbleView(bubble: bubble, scale: fitScale)
+                                }
+                                ForEach(panel.textElements) { textElement in
+                                    ComicTextView(textElement: textElement, scale: fitScale)
+                                }
+                            }
+                        }
+                        .frame(width: canvasWidth, height: canvasHeight)
+                    }
+                    .frame(width: canvasWidth, height: canvasHeight)
+                    .clipped()
+
+                    Spacer()
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func drawPanel(_ panel: Panel, in context: GraphicsContext, scale: CGFloat) {
+        let points = panel.framePoints.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }
+        guard points.count >= 3 else { return }
+
+        let path = Path.polygon(points: points)
+
+        // Fill background
+        if let bgColor = panel.backgroundColor {
+            context.fill(path, with: .color(Color(hex: bgColor)))
+        } else {
+            context.fill(path, with: .color(.white))
+        }
+
+        // Draw border
+        context.stroke(
+            path,
+            with: .color(Color(hex: panel.borderColor)),
+            lineWidth: panel.borderWidth * scale / 2
+        )
     }
 }
 
@@ -473,6 +850,9 @@ struct ExportSheet: View {
     @State private var exportFormat: ExportFormat = .png
     @State private var exportScope: ExportScope = .currentPage
     @State private var isExporting = false
+    @State private var exportedItems: [Any] = []
+    @State private var showShareSheet = false
+    @State private var exportError: String?
 
     enum ExportFormat: String, CaseIterable {
         case png = "PNG"
@@ -506,6 +886,14 @@ struct ExportSheet: View {
                     .pickerStyle(.segmented)
                 }
 
+                if let error = exportError {
+                    Section {
+                        Text(error)
+                            .foregroundColor(.red)
+                            .font(.caption)
+                    }
+                }
+
                 Section {
                     Button {
                         exportProject()
@@ -514,6 +902,8 @@ struct ExportSheet: View {
                             Spacer()
                             if isExporting {
                                 ProgressView()
+                                    .padding(.trailing, 8)
+                                Text("Exporting...")
                             } else {
                                 Label("Export", systemImage: "square.and.arrow.up")
                             }
@@ -532,67 +922,85 @@ struct ExportSheet: View {
                     }
                 }
             }
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(items: exportedItems) {
+                    dismiss()
+                }
+            }
         }
     }
 
     private func exportProject() {
         isExporting = true
+        exportError = nil
         let exporter = ComicExporter()
 
-        Task {
-            do {
-                switch exportFormat {
-                case .png:
-                    if exportScope == .currentPage, let page = currentPage {
+        Task { @MainActor in
+            var items: [Any] = []
+
+            switch exportFormat {
+            case .png:
+                if exportScope == .currentPage, let page = currentPage {
+                    if let image = exporter.exportPage(page, project: project) {
+                        items.append(image)
+                    }
+                } else {
+                    // Export all pages as separate images
+                    var images: [UIImage] = []
+                    for page in project.sortedPages {
                         if let image = exporter.exportPage(page, project: project) {
-                            await shareImage(image)
-                        }
-                    } else {
-                        // Export all pages
-                        for page in project.sortedPages {
-                            if let image = exporter.exportPage(page, project: project) {
-                                await shareImage(image)
-                            }
+                            images.append(image)
                         }
                     }
-                case .pdf:
-                    if let pdfData = exporter.exportComic(project) {
-                        await sharePDF(pdfData)
-                    }
-                case .webtoon:
-                    if let image = exporter.exportWebtoon(project) {
-                        await shareImage(image)
-                    }
+                    items.append(contentsOf: images)
                 }
-                HapticManager.shared.exportComplete()
+            case .pdf:
+                if let pdfData = exporter.exportComic(project) {
+                    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(project.title).pdf")
+                    try? pdfData.write(to: tempURL)
+                    items.append(tempURL)
+                }
+            case .webtoon:
+                if let image = exporter.exportWebtoon(project) {
+                    items.append(image)
+                }
             }
+
             isExporting = false
-            dismiss()
+
+            if items.isEmpty {
+                exportError = "Failed to export. Please try again."
+            } else {
+                exportedItems = items
+                HapticManager.shared.exportComplete()
+                showShareSheet = true
+            }
         }
     }
+}
 
-    @MainActor
-    private func shareImage(_ image: UIImage) async {
-        let activityVC = UIActivityViewController(activityItems: [image], applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first,
-           let rootVC = window.rootViewController {
-            rootVC.present(activityVC, animated: true)
+// MARK: - Share Sheet
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    var onDismiss: (() -> Void)?
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in
+            onDismiss?()
         }
+
+        // For iPad
+        if let popover = controller.popoverPresentationController {
+            popover.sourceView = UIView()
+            popover.permittedArrowDirections = []
+        }
+
+        return controller
     }
 
-    @MainActor
-    private func sharePDF(_ data: Data) async {
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(project.title).pdf")
-        try? data.write(to: tempURL)
-
-        let activityVC = UIActivityViewController(activityItems: [tempURL], applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first,
-           let rootVC = window.rootViewController {
-            rootVC.present(activityVC, animated: true)
-        }
-    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 #Preview {

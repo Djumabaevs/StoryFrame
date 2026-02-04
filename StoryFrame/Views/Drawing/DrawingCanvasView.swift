@@ -248,7 +248,8 @@ struct SpeedLinesGenerator {
         for i in 0..<lineCount {
             let angle = (CGFloat(i) / CGFloat(lineCount)) * 2 * .pi
             let innerRadius = radius * CGFloat.random(in: 0.3...0.5)
-            let lineWidth = CGFloat.random(in: 1...3)
+            // Line width is implicitly handled by stroke style when drawing
+            _ = CGFloat.random(in: 1...3)
 
             let startX = center.x + cos(angle) * innerRadius
             let startY = center.y + sin(angle) * innerRadius

@@ -9,11 +9,13 @@ struct ComicTextView: View {
     @State private var animationPhase: CGFloat = 0
 
     var body: some View {
+        let scaledFontSize = max(8, textElement.fontSize * scale)
+
         Group {
             if textElement.isSoundEffect {
                 SoundEffectTextView(
                     text: textElement.text,
-                    fontSize: textElement.fontSize * scale,
+                    fontSize: scaledFontSize,
                     color: Color(hex: textElement.fontColor),
                     effect: TextEffect(rawValue: textElement.effect) ?? .none,
                     intensity: textElement.effectIntensity
@@ -21,7 +23,7 @@ struct ComicTextView: View {
             } else if textElement.isVertical {
                 VerticalTextView(
                     text: textElement.text,
-                    fontSize: textElement.fontSize * scale,
+                    fontSize: scaledFontSize,
                     fontName: textElement.fontName,
                     color: Color(hex: textElement.fontColor),
                     furigana: textElement.furiganaText
@@ -30,8 +32,9 @@ struct ComicTextView: View {
                 standardTextView
             }
         }
-        .position(x: textElement.x * scale, y: textElement.y * scale)
+        .fixedSize()
         .rotationEffect(.degrees(textElement.rotation))
+        .position(x: textElement.x * scale, y: textElement.y * scale)
         .onAppear {
             if textElement.effect != "none" {
                 withAnimation(.linear(duration: 0.5).repeatForever(autoreverses: true)) {
@@ -305,15 +308,9 @@ struct EmotionTextView: View {
 #Preview("Comic Text Effects") {
     VStack(spacing: 30) {
         ForEach(TextEffect.allCases) { effect in
-            ComicTextPreview(
-                text: effect.displayName,
-                fontSize: 24,
-                fontName: "AvenirNext-Bold",
-                color: .black,
-                alignment: "center",
-                effect: effect,
-                intensity: 1.0
-            )
+            Text(effect.displayName)
+                .font(.custom("AvenirNext-Bold", size: 24))
+                .foregroundColor(.black)
         }
     }
     .padding()

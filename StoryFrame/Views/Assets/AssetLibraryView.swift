@@ -6,6 +6,12 @@ struct AssetLibraryView: View {
     @State private var selectedCategory: AssetCategory = .speedlines
     @State private var searchText = ""
 
+    var onAssetSelected: ((BuiltInAsset) -> Void)?
+
+    init(onAssetSelected: ((BuiltInAsset) -> Void)? = nil) {
+        self.onAssetSelected = onAssetSelected
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -56,6 +62,7 @@ struct AssetLibraryView: View {
                     AssetCard(asset: asset) {
                         // Handle asset selection
                         HapticManager.shared.tap()
+                        onAssetSelected?(asset)
                         dismiss()
                     }
                 }
