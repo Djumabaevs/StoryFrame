@@ -350,25 +350,27 @@ struct PageEditorView: View {
                     },
                     onBubbleCreated: { bubble, targetPanel in
                         // Add bubble to target panel or first panel
-                        if let panel = targetPanel ?? page.sortedPanels.first {
-                            panel.bubbles.append(bubble)
-                            selectedBubble = bubble
-                            selectedPanel = panel
-                            try? modelContext.save()
-                            HapticManager.shared.bubbleCreated()
-                            // Open editor immediately
+                        let panel = targetPanel ?? ensurePanel(in: page)
+                        panel.bubbles.append(bubble)
+                        selectedBubble = bubble
+                        selectedPanel = panel
+                        try? modelContext.save()
+                        HapticManager.shared.bubbleCreated()
+                        // Open editor immediately
+                        DispatchQueue.main.async {
                             showBubbleEditor = true
                         }
                     },
                     onTextCreated: { textElement, targetPanel in
                         // Add text to target panel or first panel
-                        if let panel = targetPanel ?? page.sortedPanels.first {
-                            panel.textElements.append(textElement)
-                            selectedTextElement = textElement
-                            selectedPanel = panel
-                            try? modelContext.save()
-                            HapticManager.shared.tap()
-                            // Open editor immediately
+                        let panel = targetPanel ?? ensurePanel(in: page)
+                        panel.textElements.append(textElement)
+                        selectedTextElement = textElement
+                        selectedPanel = panel
+                        try? modelContext.save()
+                        HapticManager.shared.tap()
+                        // Open editor immediately
+                        DispatchQueue.main.async {
                             showTextEditor = true
                         }
                     },
@@ -395,7 +397,9 @@ struct PageEditorView: View {
                         HapticManager.shared.panelCreated()
                     },
                     onAssetRequested: {
-                        showAssetLibrary = true
+                        DispatchQueue.main.async {
+                            showAssetLibrary = true
+                        }
                     },
                     onElementMoved: {
                         try? modelContext.save()
@@ -554,25 +558,7 @@ struct PageEditorView: View {
     private func addAssetToCanvas(_ asset: BuiltInAsset) {
         guard let page = currentPage else { return }
 
-        // Get target panel (selected panel or first panel)
-        var targetPanel = selectedPanel ?? page.sortedPanels.first
-
-        // If no panel exists, create one covering the full page first
-        if targetPanel == nil {
-            let fullPagePoints = [
-                CGPoint(x: 20, y: 20),
-                CGPoint(x: project.pageWidth - 20, y: 20),
-                CGPoint(x: project.pageWidth - 20, y: project.pageHeight - 20),
-                CGPoint(x: 20, y: project.pageHeight - 20)
-            ]
-            let newPanel = Panel(orderIndex: 0, framePoints: fullPagePoints)
-            page.panels.append(newPanel)
-            targetPanel = newPanel
-            selectedPanel = newPanel
-        }
-
-        guard let panel = targetPanel else { return }
-
+        let panel = ensurePanel(in: page)
         addAssetToPanel(asset, panel: panel)
 
         // Ensure the panel is selected so the user can see the asset was added
@@ -580,6 +566,23 @@ struct PageEditorView: View {
 
         try? modelContext.save()
         HapticManager.shared.tap()
+    }
+
+    private func ensurePanel(in page: ComicPage) -> Panel {
+        if let panel = selectedPanel ?? page.sortedPanels.first {
+            return panel
+        }
+
+        let fullPagePoints = [
+            CGPoint(x: 20, y: 20),
+            CGPoint(x: project.pageWidth - 20, y: 20),
+            CGPoint(x: project.pageWidth - 20, y: project.pageHeight - 20),
+            CGPoint(x: 20, y: project.pageHeight - 20)
+        ]
+        let newPanel = Panel(orderIndex: page.panels.count, framePoints: fullPagePoints)
+        page.panels.append(newPanel)
+        selectedPanel = newPanel
+        return newPanel
     }
 
     private func addAssetToPanel(_ asset: BuiltInAsset, panel: Panel) {

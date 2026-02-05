@@ -33,7 +33,7 @@ final class ComicExporter {
             // Draw layers (PencilKit drawings)
             for layer in page.sortedLayers {
                 if layer.isVisible, let drawingData = layer.drawingData {
-                    drawPencilKitLayer(drawingData, opacity: layer.opacity, in: ctx)
+                    drawPencilKitLayer(drawingData, drawingScale: layer.drawingScale, opacity: layer.opacity, in: ctx)
                 }
             }
         }
@@ -73,7 +73,7 @@ final class ComicExporter {
             // Draw layers
             for layer in page.sortedLayers {
                 if layer.isVisible, let drawingData = layer.drawingData {
-                    drawPencilKitLayer(drawingData, opacity: layer.opacity, in: pdfContext)
+                    drawPencilKitLayer(drawingData, drawingScale: layer.drawingScale, opacity: layer.opacity, in: pdfContext)
                 }
             }
 
@@ -122,7 +122,7 @@ final class ComicExporter {
 
                 for layer in page.sortedLayers {
                     if layer.isVisible, let drawingData = layer.drawingData {
-                        drawPencilKitLayer(drawingData, opacity: layer.opacity, in: ctx)
+                        drawPencilKitLayer(drawingData, drawingScale: layer.drawingScale, opacity: layer.opacity, in: ctx)
                     }
                 }
 
@@ -168,7 +168,7 @@ final class ComicExporter {
 
             for layer in page.sortedLayers {
                 if layer.isVisible, let drawingData = layer.drawingData {
-                    drawPencilKitLayer(drawingData, opacity: layer.opacity, in: pdfContext)
+                    drawPencilKitLayer(drawingData, drawingScale: layer.drawingScale, opacity: layer.opacity, in: pdfContext)
                 }
             }
 
@@ -427,15 +427,19 @@ final class ComicExporter {
         context.restoreGState()
     }
 
-    private func drawPencilKitLayer(_ data: Data, opacity: Double, in context: CGContext) {
+    private func drawPencilKitLayer(_ data: Data, drawingScale: Double, opacity: Double, in context: CGContext) {
         guard let drawing = try? PKDrawing(data: data) else { return }
 
         context.saveGState()
         context.setAlpha(opacity)
 
-        let image = drawing.image(from: drawing.bounds, scale: 1.0)
+        let storedScale = drawingScale > 0 ? drawingScale : 1.0
+        let normalized = storedScale == 1.0
+            ? drawing
+            : drawing.transformed(using: CGAffineTransform(scaleX: 1.0 / storedScale, y: 1.0 / storedScale))
+        let image = normalized.image(from: normalized.bounds, scale: 1.0)
         if let cgImage = image.cgImage {
-            context.draw(cgImage, in: drawing.bounds)
+            context.draw(cgImage, in: normalized.bounds)
         }
 
         context.restoreGState()

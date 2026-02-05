@@ -32,7 +32,9 @@ struct CanvasView: View {
     @State private var currentDrawing: PKDrawing = PKDrawing()
     @GestureState private var magnifyBy: CGFloat = 1.0
     @GestureState private var dragOffset: CGSize = .zero
-    @State private var lastScale: CGFloat = 1.0
+    @State private var lastDisplayScale: CGFloat = 1.0
+    @State private var hasLoadedDrawing = false
+    @State private var isUpdatingDrawingProgrammatically = false
 
     // Element manipulation state
     @State private var isDraggingElement = false
@@ -53,6 +55,7 @@ struct CanvasView: View {
                 (geometry.size.height - 40) / pageSize.height
             )
             let displayScale = fitScale * scale * magnifyBy
+            let isBrushTool = selectedTool == .brush || selectedTool == .eraser
 
             ZStack {
                 // Background - allows pan gesture (drag on gray area around canvas)
@@ -69,26 +72,88 @@ struct CanvasView: View {
                             }
                     )
 
-                pageCanvas(displayScale: displayScale, fitScale: fitScale)
+                pageCanvas(displayScale: displayScale, fitScale: fitScale, isBrushTool: isBrushTool)
                     .offset(x: offset.width + dragOffset.width, y: offset.height + dragOffset.height)
             }
             // Pinch to zoom - always works
             .simultaneousGesture(magnificationGesture(fitScale: fitScale))
-        }
-        .onAppear {
-            loadDrawing()
+            .onAppear {
+                loadDrawing(displayScale: displayScale)
+            }
+            .onChange(of: displayScale) { newScale in
+                updateDrawingForScaleChange(newScale)
+            }
+            .onChange(of: selectedTool) { _ in
+                resetTransientState()
+                clearSelectionIfNeeded()
+            }
+            .onChange(of: page.id) { _ in
+                hasLoadedDrawing = false
+                loadDrawing(displayScale: displayScale)
+            }
         }
     }
 
-    private func loadDrawing() {
-        if let layer = page.sortedLayers.first,
-           let drawingData = layer.drawingData,
-           let drawing = try? PKDrawing(data: drawingData) {
-            currentDrawing = drawing
+    private func loadDrawing(displayScale: CGFloat) {
+        guard !hasLoadedDrawing else { return }
+        let scale = max(displayScale, 0.0001)
+        DispatchQueue.main.async {
+            if let layer = page.sortedLayers.first,
+               let drawingData = layer.drawingData,
+               let drawing = try? PKDrawing(data: drawingData) {
+                let storedScale = layer.drawingScale > 0 ? layer.drawingScale : Double(scale)
+                if layer.drawingScale <= 0 {
+                    layer.drawingScale = storedScale
+                }
+                let scaleFactor = scale / max(CGFloat(storedScale), 0.0001)
+                isUpdatingDrawingProgrammatically = true
+                currentDrawing = drawing.transformed(using: CGAffineTransform(scaleX: scaleFactor, y: scaleFactor))
+                DispatchQueue.main.async {
+                    isUpdatingDrawingProgrammatically = false
+                }
+                lastDisplayScale = scale
+            } else {
+                isUpdatingDrawingProgrammatically = true
+                currentDrawing = PKDrawing()
+                DispatchQueue.main.async {
+                    isUpdatingDrawingProgrammatically = false
+                }
+                lastDisplayScale = scale
+            }
+            hasLoadedDrawing = true
         }
     }
 
-    private func pageCanvas(displayScale: CGFloat, fitScale: CGFloat) -> some View {
+    private func updateDrawingForScaleChange(_ newScale: CGFloat) {
+        guard hasLoadedDrawing else { return }
+        let safeScale = max(newScale, 0.0001)
+        DispatchQueue.main.async {
+            let scaleFactor = safeScale / max(lastDisplayScale, 0.0001)
+            if abs(scaleFactor - 1.0) > 0.0001 {
+                isUpdatingDrawingProgrammatically = true
+                currentDrawing = currentDrawing.transformed(using: CGAffineTransform(scaleX: scaleFactor, y: scaleFactor))
+                DispatchQueue.main.async {
+                    isUpdatingDrawingProgrammatically = false
+                }
+            }
+            lastDisplayScale = safeScale
+        }
+    }
+
+    private func resetTransientState() {
+        isDrawing = false
+        isPanning = false
+        drawingPoints.removeAll()
+    }
+
+    private func clearSelectionIfNeeded() {
+        guard selectedTool != .selection else { return }
+        selectedPanel = nil
+        selectedBubble = nil
+        selectedTextElement = nil
+    }
+
+    private func pageCanvas(displayScale: CGFloat, fitScale: CGFloat, isBrushTool: Bool) -> some View {
         let canvasWidth = pageSize.width * displayScale
         let canvasHeight = pageSize.height * displayScale
 
@@ -120,23 +185,23 @@ struct CanvasView: View {
             }
             .frame(width: canvasWidth, height: canvasHeight)
 
-            // PencilKit Drawing Layer (for brush, eraser tools)
-            if selectedTool == .brush || selectedTool == .eraser {
-                DrawingCanvasWrapper(
-                    drawing: $currentDrawing,
-                    brushType: brushType,
-                    brushSize: brushSize,
-                    brushOpacity: brushOpacity,
-                    currentColor: currentColor,
-                    isEraser: selectedTool == .eraser,
-                    pageSize: pageSize,
-                    displayScale: displayScale,
-                    onDrawingChanged: { newDrawing in
-                        saveDrawingToLayer(newDrawing)
-                    }
-                )
-                .frame(width: canvasWidth, height: canvasHeight)
-            }
+            // PencilKit Drawing Layer (always present, hit-testing toggled)
+            DrawingCanvasWrapper(
+                drawing: $currentDrawing,
+                brushType: brushType,
+                brushSize: brushSize,
+                brushOpacity: brushOpacity,
+                currentColor: currentColor,
+                isEraser: selectedTool == .eraser,
+                pageSize: pageSize,
+                displayScale: displayScale,
+                onDrawingChanged: { newDrawing in
+                    saveDrawingToLayer(newDrawing, displayScale: displayScale)
+                }
+            )
+            .frame(width: canvasWidth, height: canvasHeight)
+            .opacity(isBrushTool ? 1 : 0)
+            .allowsHitTesting(isBrushTool)
 
             // Drawing layers (render existing drawings)
             ForEach(page.sortedLayers) { layer in
@@ -161,7 +226,7 @@ struct CanvasView: View {
             .frame(width: canvasWidth, height: canvasHeight)
 
             // Selection indicators - these use .position() for absolute positioning
-            if !showPreview {
+            if !showPreview && selectedTool == .selection {
                 selectionOverlays(displayScale: displayScale)
             }
         }
@@ -169,7 +234,8 @@ struct CanvasView: View {
         .clipped()
     }
 
-    private func saveDrawingToLayer(_ drawing: PKDrawing) {
+    private func saveDrawingToLayer(_ drawing: PKDrawing, displayScale: CGFloat) {
+        guard !isUpdatingDrawingProgrammatically else { return }
         // Get or create first layer
         let layer: DrawingLayer
         if let existingLayer = page.sortedLayers.first {
@@ -178,8 +244,11 @@ struct CanvasView: View {
             layer = DrawingLayer(name: "Layer 1", orderIndex: 0)
             page.layers.append(layer)
         }
-        layer.drawingData = drawing.dataRepresentation()
-        onDrawingChanged?(drawing.dataRepresentation())
+        let scale = max(displayScale, 0.0001)
+        let normalized = drawing.transformed(using: CGAffineTransform(scaleX: 1.0 / scale, y: 1.0 / scale))
+        layer.drawingData = normalized.dataRepresentation()
+        layer.drawingScale = 1.0
+        onDrawingChanged?(normalized.dataRepresentation())
     }
 
     private func drawPanel(_ panel: Panel, in context: GraphicsContext, scale: CGFloat) {
@@ -320,27 +389,10 @@ struct CanvasView: View {
                 case .bubble:
                     if !isDrawing {
                         isDrawing = true
-                        // Create bubble at tap location
-                        let bubble = SpeechBubble(
-                            type: bubbleType.rawValue,
-                            center: location,
-                            size: AppConstants.defaultBubbleSize
-                        )
-                        // Find which panel the bubble is in
-                        let targetPanel = findPanel(at: location)
-                        onBubbleCreated(bubble, targetPanel)
                     }
                 case .text:
                     if !isDrawing {
                         isDrawing = true
-                        // Create text element at tap location
-                        let textElement = TextElement(
-                            text: "Text",
-                            position: location
-                        )
-                        // Find which panel the text is in
-                        let targetPanel = findPanel(at: location)
-                        onTextCreated(textElement, targetPanel)
                     }
                 case .shape:
                     if !isDrawing {
@@ -357,7 +409,6 @@ struct CanvasView: View {
                 case .asset:
                     if !isDrawing {
                         isDrawing = true
-                        onAssetRequested?()
                     }
                 case .selection:
                     // When nothing is selected, allow panning by dragging on canvas
@@ -379,6 +430,23 @@ struct CanvasView: View {
                     finishPanelDrawing()
                 case .shape:
                     finishShapeDrawing()
+                case .bubble:
+                    let bubble = SpeechBubble(
+                        type: bubbleType.rawValue,
+                        center: location,
+                        size: AppConstants.defaultBubbleSize
+                    )
+                    let targetPanel = findPanel(at: location)
+                    onBubbleCreated(bubble, targetPanel)
+                case .text:
+                    let textElement = TextElement(
+                        text: "Text",
+                        position: location
+                    )
+                    let targetPanel = findPanel(at: location)
+                    onTextCreated(textElement, targetPanel)
+                case .asset:
+                    onAssetRequested?()
                 case .selection:
                     // Only handle tap for selection if we weren't panning
                     if !isPanning {
@@ -397,7 +465,12 @@ struct CanvasView: View {
     @State private var panStartOffset: CGSize = .zero
 
     private func handleCanvasPan(translation: CGSize) {
+        let threshold: CGFloat = 4
         if !isPanning {
+            let distance = hypot(translation.width, translation.height)
+            if distance < threshold {
+                return
+            }
             isPanning = true
             panStartOffset = offset
         }
@@ -414,13 +487,12 @@ struct CanvasView: View {
     private func magnificationGesture(fitScale: CGFloat) -> some Gesture {
         MagnificationGesture()
             .updating($magnifyBy) { value, state, _ in
-                // Smooth live update during gesture - clamp the multiplier
-                state = max(0.5 / lastScale, min(3.0 / lastScale, value))
+                // Smooth live update during gesture - clamp the multiplier relative to current scale
+                state = max(0.5 / max(scale, 0.0001), min(3.0 / max(scale, 0.0001), value))
             }
             .onEnded { value in
                 // Commit the final scale
                 scale = max(0.5, min(3.0, scale * value))
-                lastScale = 1.0
             }
     }
 
@@ -977,7 +1049,16 @@ struct DrawingLayerPreview: View {
     var body: some View {
         if let drawingData = layer.drawingData,
            let drawing = try? PKDrawing(data: drawingData) {
-            Image(uiImage: drawing.image(from: CGRect(origin: .zero, size: pageSize), scale: displayScale))
+            let storedScale = layer.drawingScale > 0 ? layer.drawingScale : Double(displayScale)
+            let scaleFactor = displayScale / max(CGFloat(storedScale), 0.0001)
+            let adjusted = abs(scaleFactor - 1.0) > 0.0001
+                ? drawing.transformed(using: CGAffineTransform(scaleX: scaleFactor, y: scaleFactor))
+                : drawing
+            let targetSize = CGSize(width: pageSize.width * displayScale, height: pageSize.height * displayScale)
+            let image = adjusted.image(from: CGRect(origin: .zero, size: targetSize), scale: 1.0)
+            Image(uiImage: image)
+                .resizable()
+                .frame(width: targetSize.width, height: targetSize.height)
                 .opacity(layer.opacity)
         }
     }

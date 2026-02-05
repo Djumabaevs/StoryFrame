@@ -241,6 +241,8 @@ final class DrawingLayer {
     var isLocked: Bool
     var opacity: Double
     var drawingData: Data?
+    // 0 means legacy/unknown scale
+    var drawingScale: Double = 0
 
     init(name: String, orderIndex: Int) {
         self.id = UUID()
@@ -249,6 +251,7 @@ final class DrawingLayer {
         self.isVisible = true
         self.isLocked = false
         self.opacity = 1.0
+        self.drawingScale = 1.0
     }
 
     var drawing: PKDrawing? {
