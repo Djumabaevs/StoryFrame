@@ -224,6 +224,36 @@ struct PanelTemplatePresets {
                     [CGPoint(x: 0, y: 0), CGPoint(x: w, y: 0),
                      CGPoint(x: w, y: h), CGPoint(x: 0, y: h)]
                 ]
+            ),
+
+            // Manga Templates
+            (
+                name: "Manga Dramatic",
+                category: "manga",
+                panels: [
+                    [CGPoint(x: margin, y: margin), CGPoint(x: w * 0.4, y: margin),
+                     CGPoint(x: w * 0.35, y: h * 0.45), CGPoint(x: margin, y: h * 0.5)],
+                    [CGPoint(x: w * 0.4 + gutter, y: margin), CGPoint(x: w - margin, y: margin),
+                     CGPoint(x: w - margin, y: h * 0.35), CGPoint(x: w * 0.35 + gutter, y: h * 0.45)],
+                    [CGPoint(x: margin, y: h * 0.5 + gutter), CGPoint(x: w * 0.55, y: h * 0.35 + gutter),
+                     CGPoint(x: w * 0.55, y: h - margin), CGPoint(x: margin, y: h - margin)],
+                    [CGPoint(x: w * 0.55 + gutter, y: h * 0.35 + gutter), CGPoint(x: w - margin, y: h * 0.35 + gutter),
+                     CGPoint(x: w - margin, y: h - margin), CGPoint(x: w * 0.55 + gutter, y: h - margin)]
+                ]
+            ),
+            (
+                name: "Manga Speed",
+                category: "manga",
+                panels: [
+                    [CGPoint(x: margin, y: margin), CGPoint(x: w - margin, y: margin),
+                     CGPoint(x: w - margin, y: h * 0.25), CGPoint(x: margin, y: h * 0.3)],
+                    [CGPoint(x: margin, y: h * 0.3 + gutter), CGPoint(x: w * 0.5, y: h * 0.25 + gutter),
+                     CGPoint(x: w * 0.45, y: h * 0.6), CGPoint(x: margin, y: h * 0.65)],
+                    [CGPoint(x: w * 0.5 + gutter, y: h * 0.25 + gutter), CGPoint(x: w - margin, y: h * 0.25 + gutter),
+                     CGPoint(x: w - margin, y: h * 0.65), CGPoint(x: w * 0.45 + gutter, y: h * 0.6)],
+                    [CGPoint(x: margin, y: h * 0.65 + gutter), CGPoint(x: w - margin, y: h * 0.65 + gutter),
+                     CGPoint(x: w - margin, y: h - margin), CGPoint(x: margin, y: h - margin)]
+                ]
             )
         ]
     }
