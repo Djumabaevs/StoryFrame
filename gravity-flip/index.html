@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Gravity Flip - Puzzle Platformer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: manipulation;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #1a1a2e;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <script>
+        // ==================== CONFIGURATION ====================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let WIDTH, HEIGHT, SCALE;
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 600;
+        const TILE_SIZE = 40;
+        
+        function resize() {
+            WIDTH = window.innerWidth;
+            HEIGHT = window.innerHeight;
+            canvas.width = WIDTH;
+            canvas.height = HEIGHT;
+            SCALE = Math.min(WIDTH / GAME_WIDTH, HEIGHT / GAME_HEIGHT);
+        }
+        resize();
+        window.addEventListener('resize', resize);
+        
+        // ==================== AUDIO ====================
+        class AudioManager {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+            
+            init() {
+                if (this.ctx) return;
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.gain = this.ctx.createGain();
+                this.gain.connect(this.ctx.destination);
+                this.gain.gain.value = 0.25;
+            }
+            
+            play(type) {
+                if (!this.ctx || !this.enabled) return;
+                const osc = this.ctx.createOscillator();
+                const g = this.ctx.createGain();
+                osc.connect(g);
+                g.connect(this.gain);
+                
+                switch(type) {
+                    case 'flip':
+                        osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(440, this.ctx.currentTime + 0.1);
+                        osc.type = 'sine';
+                        g.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.15);
+                        break;
+                    case 'win':
+                        osc.frequency.setValueAtTime(523, this.ctx.currentTime);
+                        osc.frequency.setValueAtTime(659, this.ctx.currentTime + 0.1);
+                        osc.frequency.setValueAtTime(784, this.ctx.currentTime + 0.2);
+                        osc.type = 'sine';
+                        g.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.4);
+                        break;
+                    case 'collect':
+                        osc.frequency.setValueAtTime(880, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(1760, this.ctx.currentTime + 0.1);
+                        osc.type = 'sine';
+                        g.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.15);
+                        break;
+                    case 'die':
+                        osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.3);
+                        osc.type = 'sawtooth';
+                        g.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.3);
+                        break;
+                    case 'jump':
+                        osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(500, this.ctx.currentTime + 0.1);
+                        osc.type = 'triangle';
+                        g.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.1);
+                        break;
+                }
+            }
+        }
+        
+        const audio = new AudioManager();
+        
+        // ==================== PARTICLES ====================
+        class Particles {
+            constructor() {
+                this.list = [];
+            }
+            
+            emit(x, y, count, color, speedRange, sizeRange, lifeRange) {
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = speedRange[0] + Math.random() * (speedRange[1] - speedRange[0]);
+                    this.list.push({
+                        x, y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        size: sizeRange[0] + Math.random() * (sizeRange[1] - sizeRange[0]),
+                        life: lifeRange[0] + Math.random() * (lifeRange[1] - lifeRange[0]),
+                        maxLife: lifeRange[1],
+                        color
+                    });
+                }
+            }
+            
+            update(dt) {
+                this.list = this.list.filter(p => {
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.life -= dt;
+                    return p.life > 0;
+                });
+            }
+            
+            draw(ctx) {
+                this.list.forEach(p => {
+                    ctx.globalAlpha = p.life / p.maxLife;
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+                });
+                ctx.globalAlpha = 1;
+            }
+        }
+        
+        // ==================== LEVELS ====================
+        const LEVELS = [
+            // Level 1 - Tutorial
+            {
+                map: [
+                    "####################",
+                    "#..................#",
+                    "#..................#",
+                    "#..P...............#",
+                    "#####..............#",
+                    "#...........*......#",
+                    "#..................#",
+                    "#...........#####..#",
+                    "#..................#",
+                    "#.........E........#",
+                    "#..................#",
+                    "#..............#####",
+                    "#..................#",
+                    "#..................#",
+                    "####################"
+                ],
+                hint: "Press SPACE or TAP to flip gravity!"
+            },
+            // Level 2
+            {
+                map: [
+                    "####################",
+                    "#..................#",
+                    "#..P...............#",
+                    "######.............#",
+                    "#..........*....*..#",
+                    "#..................#",
+                    "#.......####.......#",
+                    "#..................#",
+                    "#...####...........#",
+                    "#...............*..#",
+                    "#..................#",
+                    "#.........#####..E.#",
+                    "#..................#",
+                    "#..................#",
+                    "####################"
+                ],
+                hint: "Collect all stars!"
+            },
+            // Level 3
+            {
+                map: [
+                    "####################",
+                    "#....X.....X.......#",
+                    "#P.................#",
+                    "###................#",
+                    "#.......*..........#",
+                    "#..................#",
+                    "#.....######.......#",
+                    "#..................#",
+                    "#..X..........X....#",
+                    "#.......*..........#",
+                    "#..................#",
+                    "#...........####...#",
+                    "#.................E#",
+                    "#..................#",
+                    "####################"
+                ],
+                hint: "Avoid the red spikes!"
+            },
+            // Level 4
+            {
+                map: [
+                    "####################",
+                    "#..................#",
+                    "#P...*............*#",
+                    "####...............#",
+                    "#......X...........#",
+                    "#..................#",
+                    "#.....#####........#",
+                    "#..........X.......#",
+                    "#..................#",
+                    "#........#####.....#",
+                    "#...X..............#",
+                    "#..................#",
+                    "#...........*....E.#",
+                    "#..............#####",
+                    "####################"
+                ],
+                hint: "Plan your flips carefully!"
+            },
+            // Level 5
+            {
+                map: [
+                    "####################",
+                    "#..X...X...X...X...#",
+                    "#P.................#",
+                    "##.................#",
+                    "#......*...*.......#",
+                    "#..................#",
+                    "#....########......#",
+                    "#..................#",
+                    "#..................#",
+                    "#.....########.....#",
+                    "#..................#",
+                    "#...*.......*......#",
+                    "#.................E#",
+                    "#X..X...X...X...X..#",
+                    "####################"
+                ],
+                hint: "Timing is everything!"
+            },
+            // Level 6
+            {
+                map: [
+                    "####################",
+                    "#..................#",
+                    "#P..*.............E#",
+                    "###...............##",
+                    "#......X.....X.....#",
+                    "#..................#",
+                    "#...####..####.....#",
+                    "#..................#",
+                    "#.....X.....X......#",
+                    "#..................#",
+                    "#...####..####.....#",
+                    "#......X.....X.....#",
+                    "#...*...........*..#",
+                    "#..................#",
+                    "####################"
+                ],
+                hint: "Navigate through danger!"
+            },
+            // Level 7
+            {
+                map: [
+                    "####################",
+                    "#X.X.X.X.X.X.X.X.X.#",
+                    "#P................*#",
+                    "##.................#",
+                    "#..................#",
+                    "#.....#....#.......#",
+                    "#..................#",
+                    "#........*.........#",
+                    "#..................#",
+                    "#.....#....#.......#",
+                    "#..................#",
+                    "#*.................#",
+                    "#.................E#",
+                    "#X.X.X.X.X.X.X.X.X.#",
+                    "####################"
+                ],
+                hint: "Stay in the middle!"
+            },
+            // Level 8
+            {
+                map: [
+                    "####################",
+                    "#..................#",
+                    "#P..*..............#",
+                    "####...............#",
+                    "#.....X............#",
+                    "#..................#",
+                    "#.......###........#",
+                    "#........X.........#",
+                    "#..................#",
+                    "#..........###.....#",
+                    "#...........X......#",
+                    "#...*..............#",
+                    "#..............*..E#",
+                    "#..............####",
+                    "####################"
+                ],
+                hint: "Zigzag your way!"
+            },
+            // Level 9
+            {
+                map: [
+                    "####################",
+                    "#XXXXXXXXXXXXXXXXXX#",
+                    "#P.................#",
+                    "##.................#",
+                    "#....*......*......#",
+                    "#..................#",
+                    "#......#..#..#.....#",
+                    "#..................#",
+                    "#......#..#..#.....#",
+                    "#..................#",
+                    "#....*......*......#",
+                    "#.................E#",
+                    "#..................#",
+                    "#XXXXXXXXXXXXXXXXXX#",
+                    "####################"
+                ],
+                hint: "Don't touch the ceiling or floor!"
+            },
+            // Level 10 - Final
+            {
+                map: [
+                    "####################",
+                    "#X.X.X.X.X.X.X.X.X.#",
+                    "#P.................#",
+                    "##.....*...........#",
+                    "#......X...........#",
+                    "#.....###..........#",
+                    "#..................#",
+                    "#.........*........#",
+                    "#........X.........#",
+                    "#.......###........#",
+                    "#..................#",
+                    "#...........*......#",
+                    "#..........X......E#",
+                    "#X.X.X.X.X.X.X.###.#",
+                    "####################"
+                ],
+                hint: "The final challenge!"
+            }
+        ];
+        
+        // ==================== GAME STATE ====================
+        let gameState = 'menu'; // menu, playing, levelComplete, gameComplete
+        let currentLevel = 0;
+        let player = null;
+        let tiles = [];
+        let stars = [];
+        let spikes = [];
+        let exitPos = null;
+        let particles = new Particles();
+        let gravityDir = 1; // 1 = down, -1 = up
+        let collectedStars = 0;
+        let totalStars = 0;
+        let deathCount = 0;
+        let levelStartTime = 0;
+        let totalTime = 0;
+        let canFlip = true;
+        let hint = '';
+        let hintAlpha = 1;
+        
+        const keys = {};
+        let touchStart = null;
+        
+        // ==================== INPUT ====================
+        document.addEventListener('keydown', e => {
+            keys[e.code] = true;
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+                e.preventDefault();
+                handleFlip();
+            }
+            if (e.code === 'KeyR') {
+                restartLevel();
+            }
+        });
+        
+        document.addEventListener('keyup', e => {
+            keys[e.code] = false;
+        });
+        
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            audio.init();
+            touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            if (gameState === 'menu') {
+                startGame();
+            } else if (gameState === 'playing') {
+                handleFlip();
+            } else if (gameState === 'levelComplete') {
+                nextLevel();
+            } else if (gameState === 'gameComplete') {
+                gameState = 'menu';
+            }
+        });
+        
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (!touchStart || gameState !== 'playing') return;
+            const dx = e.touches[0].clientX - touchStart.x;
+            if (Math.abs(dx) > 30) {
+                if (dx > 0) {
+                    keys['ArrowRight'] = true;
+                    keys['ArrowLeft'] = false;
+                } else {
+                    keys['ArrowLeft'] = true;
+                    keys['ArrowRight'] = false;
+                }
+            }
+        });
+        
+        canvas.addEventListener('touchend', e => {
+            touchStart = null;
+            keys['ArrowLeft'] = false;
+            keys['ArrowRight'] = false;
+        });
+        
+        canvas.addEventListener('mousedown', e => {
+            audio.init();
+            if (gameState === 'menu') {
+                startGame();
+            } else if (gameState === 'playing') {
+                handleFlip();
+            } else if (gameState === 'levelComplete') {
+                nextLevel();
+            } else if (gameState === 'gameComplete') {
+                gameState = 'menu';
+            }
+        });
+        
+        function handleFlip() {
+            if (gameState !== 'playing' || !canFlip) return;
+            gravityDir *= -1;
+            canFlip = false;
+            audio.play('flip');
+            particles.emit(player.x + player.width/2, player.y + player.height/2, 15, '#a855f7', [2, 5], [3, 6], [0.3, 0.5]);
+            setTimeout(() => canFlip = true, 200);
+        }
+        
+        // ==================== GAME FUNCTIONS ====================
+        function startGame() {
+            currentLevel = 0;
+            totalTime = 0;
+            deathCount = 0;
+            loadLevel(currentLevel);
+            gameState = 'playing';
+        }
+        
+        function loadLevel(index) {
+            const level = LEVELS[index];
+            tiles = [];
+            stars = [];
+            spikes = [];
+            player = null;
+            exitPos = null;
+            gravityDir = 1;
+            collectedStars = 0;
+            totalStars = 0;
+            hint = level.hint;
+            hintAlpha = 1;
+            levelStartTime = Date.now();
+            
+            for (let y = 0; y < level.map.length; y++) {
+                for (let x = 0; x < level.map[y].length; x++) {
+                    const char = level.map[y][x];
+                    const px = x * TILE_SIZE;
+                    const py = y * TILE_SIZE;
+                    
+                    switch(char) {
+                        case '#':
+                            tiles.push({ x: px, y: py, width: TILE_SIZE, height: TILE_SIZE });
+                            break;
+                        case 'P':
+                            player = {
+                                x: px + 4,
+                                y: py + 8,
+                                width: 32,
+                                height: 32,
+                                vx: 0,
+                                vy: 0,
+                                onGround: false
+                            };
+                            break;
+                        case '*':
+                            stars.push({ x: px + TILE_SIZE/2, y: py + TILE_SIZE/2, collected: false });
+                            totalStars++;
+                            break;
+                        case 'X':
+                            spikes.push({ x: px, y: py, width: TILE_SIZE, height: TILE_SIZE });
+                            break;
+                        case 'E':
+                            exitPos = { x: px, y: py, width: TILE_SIZE, height: TILE_SIZE };
+                            break;
+                    }
+                }
+            }
+        }
+        
+        function restartLevel() {
+            deathCount++;
+            loadLevel(currentLevel);
+        }
+        
+        function nextLevel() {
+            currentLevel++;
+            if (currentLevel >= LEVELS.length) {
+                gameState = 'gameComplete';
+            } else {
+                loadLevel(currentLevel);
+                gameState = 'playing';
+            }
+        }
+        
+        function completeLevel() {
+            const levelTime = (Date.now() - levelStartTime) / 1000;
+            totalTime += levelTime;
+            audio.play('win');
+            gameState = 'levelComplete';
+        }
+        
+        function die() {
+            audio.play('die');
+            particles.emit(player.x + player.width/2, player.y + player.height/2, 30, '#ef4444', [3, 8], [4, 10], [0.5, 1]);
+            setTimeout(restartLevel, 500);
+        }
+        
+        // ==================== UPDATE ====================
+        let lastTime = performance.now();
+        
+        function update() {
+            const now = performance.now();
+            const dt = Math.min((now - lastTime) / 1000, 0.05); // Cap delta time
+            lastTime = now;
+            
+            if (gameState === 'playing' && player) {
+                // Horizontal movement
+                const speed = 200;
+                if (keys['ArrowLeft'] || keys['KeyA']) {
+                    player.vx = -speed * dt;
+                } else if (keys['ArrowRight'] || keys['KeyD']) {
+                    player.vx = speed * dt;
+                } else {
+                    player.vx = 0;
+                }
+                
+                // Gravity
+                const gravity = 800 * dt * gravityDir;
+                player.vy += gravity;
+                player.vy = Math.max(-400 * dt, Math.min(400 * dt, player.vy));
+                
+                // Move and collide
+                player.x += player.vx;
+                collideX();
+                player.y += player.vy;
+                collideY();
+                
+                // Star collection
+                stars.forEach(star => {
+                    if (star.collected) return;
+                    const dx = player.x + player.width/2 - star.x;
+                    const dy = player.y + player.height/2 - star.y;
+                    if (Math.sqrt(dx*dx + dy*dy) < 25) {
+                        star.collected = true;
+                        collectedStars++;
+                        audio.play('collect');
+                        particles.emit(star.x, star.y, 10, '#fbbf24', [2, 5], [3, 6], [0.3, 0.5]);
+                    }
+                });
+                
+                // Spike collision
+                spikes.forEach(spike => {
+                    if (rectCollision(player, spike)) {
+                        die();
+                    }
+                });
+                
+                // Exit check
+                if (exitPos && collectedStars >= totalStars && rectCollision(player, exitPos)) {
+                    completeLevel();
+                }
+                
+                // Hint fade
+                if (hintAlpha > 0) {
+                    hintAlpha -= dt * 0.2;
+                }
+            }
+            
+            particles.update(dt);
+        }
+        
+        function collideX() {
+            tiles.forEach(tile => {
+                if (rectCollision(player, tile)) {
+                    if (player.vx > 0) {
+                        player.x = tile.x - player.width;
+                    } else if (player.vx < 0) {
+                        player.x = tile.x + tile.width;
+                    }
+                    player.vx = 0;
+                }
+            });
+        }
+        
+        function collideY() {
+            player.onGround = false;
+            tiles.forEach(tile => {
+                if (rectCollision(player, tile)) {
+                    if (player.vy * gravityDir > 0) {
+                        if (gravityDir > 0) {
+                            player.y = tile.y - player.height;
+                        } else {
+                            player.y = tile.y + tile.height;
+                        }
+                        player.onGround = true;
+                    } else {
+                        if (gravityDir > 0) {
+                            player.y = tile.y + tile.height;
+                        } else {
+                            player.y = tile.y - player.height;
+                        }
+                    }
+                    player.vy = 0;
+                }
+            });
+        }
+        
+        function rectCollision(a, b) {
+            return a.x < b.x + b.width &&
+                   a.x + a.width > b.x &&
+                   a.y < b.y + b.height &&
+                   a.y + a.height > b.y;
+        }
+        
+        // ==================== DRAW ====================
+        function draw() {
+            ctx.fillStyle = '#0f0f1a';
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+            
+            ctx.save();
+            ctx.translate(WIDTH/2, HEIGHT/2);
+            ctx.scale(SCALE, SCALE);
+            ctx.translate(-GAME_WIDTH/2, -GAME_HEIGHT/2);
+            
+            if (gameState === 'menu') {
+                drawMenu();
+            } else if (gameState === 'playing' || gameState === 'levelComplete') {
+                drawGame();
+                if (gameState === 'levelComplete') {
+                    drawLevelComplete();
+                }
+            } else if (gameState === 'gameComplete') {
+                drawGameComplete();
+            }
+            
+            ctx.restore();
+        }
+        
+        function drawMenu() {
+            // Title
+            ctx.fillStyle = '#a855f7';
+            ctx.font = 'bold 72px system-ui';
+            ctx.textAlign = 'center';
+            ctx.fillText('GRAVITY FLIP', GAME_WIDTH/2, 180);
+            
+            // Subtitle
+            ctx.fillStyle = '#6366f1';
+            ctx.font = '28px system-ui';
+            ctx.fillText('A Puzzle Platformer', GAME_WIDTH/2, 230);
+            
+            // Animated character preview
+            const previewY = 350 + Math.sin(Date.now() * 0.003) * 20;
+            ctx.fillStyle = '#22d3ee';
+            ctx.fillRect(GAME_WIDTH/2 - 20, previewY, 40, 40);
+            ctx.fillStyle = '#0f0f1a';
+            ctx.fillRect(GAME_WIDTH/2 - 10, previewY + 10, 8, 8);
+            ctx.fillRect(GAME_WIDTH/2 + 2, previewY + 10, 8, 8);
+            
+            // Arrow indicator
+            ctx.fillStyle = '#a855f7';
+            const arrowY = previewY + (Math.sin(Date.now() * 0.005) > 0 ? -50 : 50);
+            ctx.beginPath();
+            ctx.moveTo(GAME_WIDTH/2, arrowY);
+            ctx.lineTo(GAME_WIDTH/2 - 15, arrowY + (arrowY < previewY ? 20 : -20));
+            ctx.lineTo(GAME_WIDTH/2 + 15, arrowY + (arrowY < previewY ? 20 : -20));
+            ctx.fill();
+            
+            // Instructions
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '24px system-ui';
+            ctx.fillText('Click or Tap to Start', GAME_WIDTH/2, 480);
+            
+            ctx.font = '18px system-ui';
+            ctx.fillStyle = '#64748b';
+            ctx.fillText('SPACE / TAP - Flip Gravity  |  A/D or ←/→ - Move', GAME_WIDTH/2, 530);
+        }
+        
+        function drawGame() {
+            // Background grid
+            ctx.strokeStyle = '#1e1e3a';
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= GAME_WIDTH; x += TILE_SIZE) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, GAME_HEIGHT);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= GAME_HEIGHT; y += TILE_SIZE) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(GAME_WIDTH, y);
+                ctx.stroke();
+            }
+            
+            // Tiles
+            tiles.forEach(tile => {
+                const gradient = ctx.createLinearGradient(tile.x, tile.y, tile.x, tile.y + TILE_SIZE);
+                gradient.addColorStop(0, '#3b3b5c');
+                gradient.addColorStop(1, '#2a2a4a');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(tile.x, tile.y, tile.width, tile.height);
+                ctx.strokeStyle = '#4a4a6a';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(tile.x, tile.y, tile.width, tile.height);
+            });
+            
+            // Spikes
+            spikes.forEach(spike => {
+                ctx.fillStyle = '#ef4444';
+                const cx = spike.x + TILE_SIZE/2;
+                const cy = spike.y + TILE_SIZE/2;
+                // Draw X shape
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(spike.x + 8, spike.y + 8);
+                ctx.lineTo(spike.x + TILE_SIZE - 8, spike.y + TILE_SIZE - 8);
+                ctx.moveTo(spike.x + TILE_SIZE - 8, spike.y + 8);
+                ctx.lineTo(spike.x + 8, spike.y + TILE_SIZE - 8);
+                ctx.stroke();
+            });
+            
+            // Stars
+            stars.forEach(star => {
+                if (star.collected) return;
+                const pulse = 1 + Math.sin(Date.now() * 0.005 + star.x) * 0.15;
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath();
+                const spikes = 5;
+                const outerRadius = 12 * pulse;
+                const innerRadius = 6 * pulse;
+                for (let i = 0; i < spikes * 2; i++) {
+                    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                    const angle = (i * Math.PI / spikes) - Math.PI / 2;
+                    const x = star.x + Math.cos(angle) * radius;
+                    const y = star.y + Math.sin(angle) * radius;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+            });
+            
+            // Exit
+            if (exitPos) {
+                const canExit = collectedStars >= totalStars;
+                ctx.fillStyle = canExit ? '#22c55e' : '#374151';
+                ctx.fillRect(exitPos.x + 5, exitPos.y + 5, exitPos.width - 10, exitPos.height - 10);
+                ctx.strokeStyle = canExit ? '#4ade80' : '#6b7280';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(exitPos.x + 5, exitPos.y + 5, exitPos.width - 10, exitPos.height - 10);
+                
+                ctx.fillStyle = canExit ? '#fff' : '#9ca3af';
+                ctx.font = 'bold 14px system-ui';
+                ctx.textAlign = 'center';
+                ctx.fillText('EXIT', exitPos.x + exitPos.width/2, exitPos.y + exitPos.height/2 + 5);
+            }
+            
+            // Player
+            if (player) {
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(player.x + 4, player.y + player.height - 4, player.width - 8, 8);
+                
+                // Body
+                ctx.fillStyle = '#22d3ee';
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+                
+                // Eyes
+                ctx.fillStyle = '#0f0f1a';
+                const eyeY = gravityDir > 0 ? player.y + 10 : player.y + player.height - 18;
+                ctx.fillRect(player.x + 6, eyeY, 8, 8);
+                ctx.fillRect(player.x + player.width - 14, eyeY, 8, 8);
+                
+                // Gravity indicator
+                ctx.fillStyle = '#a855f7';
+                const indicatorY = gravityDir > 0 ? player.y + player.height + 5 : player.y - 15;
+                ctx.beginPath();
+                ctx.moveTo(player.x + player.width/2, indicatorY + (gravityDir > 0 ? 10 : 0));
+                ctx.lineTo(player.x + player.width/2 - 8, indicatorY + (gravityDir > 0 ? 0 : 10));
+                ctx.lineTo(player.x + player.width/2 + 8, indicatorY + (gravityDir > 0 ? 0 : 10));
+                ctx.fill();
+            }
+            
+            // Particles
+            particles.draw(ctx);
+            
+            // HUD
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 24px system-ui';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Level ${currentLevel + 1}`, 20, 35);
+            
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillText(`★ ${collectedStars}/${totalStars}`, GAME_WIDTH - 20, 35);
+            
+            // Hint
+            if (hintAlpha > 0 && hint) {
+                ctx.globalAlpha = hintAlpha;
+                ctx.fillStyle = '#a855f7';
+                ctx.font = '20px system-ui';
+                ctx.textAlign = 'center';
+                ctx.fillText(hint, GAME_WIDTH/2, GAME_HEIGHT - 30);
+                ctx.globalAlpha = 1;
+            }
+        }
+        
+        function drawLevelComplete() {
+            ctx.fillStyle = 'rgba(15, 15, 26, 0.85)';
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            
+            ctx.fillStyle = '#22c55e';
+            ctx.font = 'bold 48px system-ui';
+            ctx.textAlign = 'center';
+            ctx.fillText('LEVEL COMPLETE!', GAME_WIDTH/2, 250);
+            
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = '28px system-ui';
+            ctx.fillText(`★ ${collectedStars}/${totalStars} Stars`, GAME_WIDTH/2, 320);
+            
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '24px system-ui';
+            ctx.fillText('Click or Tap to continue', GAME_WIDTH/2, 400);
+        }
+        
+        function drawGameComplete() {
+            ctx.fillStyle = 'rgba(15, 15, 26, 0.95)';
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            
+            ctx.fillStyle = '#a855f7';
+            ctx.font = 'bold 56px system-ui';
+            ctx.textAlign = 'center';
+            ctx.fillText('CONGRATULATIONS!', GAME_WIDTH/2, 180);
+            
+            ctx.fillStyle = '#22d3ee';
+            ctx.font = '32px system-ui';
+            ctx.fillText('You completed all levels!', GAME_WIDTH/2, 250);
+            
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = '24px system-ui';
+            ctx.fillText(`Total Time: ${totalTime.toFixed(1)}s`, GAME_WIDTH/2, 330);
+            ctx.fillText(`Deaths: ${deathCount}`, GAME_WIDTH/2, 370);
+            
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '22px system-ui';
+            ctx.fillText('Click or Tap to play again', GAME_WIDTH/2, 470);
+        }
+        
+        // ==================== GAME LOOP ====================
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        gameLoop();
+    </script>
+</body>
+</html>

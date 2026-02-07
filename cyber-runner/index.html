@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Runner - Run & Gun Platformer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+        }
+        
+        #gameCanvas {
+            border: 3px solid #f0f;
+            box-shadow: 0 0 30px rgba(255, 0, 255, 0.4), inset 0 0 60px rgba(0, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+        
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 100;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        h1 {
+            font-size: 3.5rem;
+            background: linear-gradient(90deg, #0ff, #f0f, #0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+            margin-bottom: 10px;
+            letter-spacing: 3px;
+        }
+        
+        .subtitle {
+            color: #888;
+            font-size: 1.2rem;
+            margin-bottom: 40px;
+        }
+        
+        h2 {
+            font-size: 2.5rem;
+            color: #f0f;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            padding: 15px 50px;
+            font-size: 1.2rem;
+            background: linear-gradient(135deg, #f0f, #a0f);
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 10px;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: bold;
+        }
+        
+        .btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(255, 0, 255, 0.6);
+        }
+        
+        .controls {
+            margin-top: 30px;
+            color: #666;
+            font-size: 0.9rem;
+            line-height: 2;
+        }
+        
+        .controls span {
+            color: #0ff;
+            font-weight: bold;
+        }
+        
+        .stats {
+            font-size: 1.5rem;
+            margin: 20px 0;
+        }
+        
+        .stats div {
+            margin: 10px 0;
+        }
+        
+        .final-score {
+            font-size: 3rem;
+            color: #0ff;
+            text-shadow: 0 0 20px #0ff;
+        }
+
+        .level-complete {
+            color: #0f0;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Main Menu -->
+        <div id="menuOverlay" class="overlay">
+            <h1>CYBER RUNNER</h1>
+            <p class="subtitle">Run. Jump. Shoot. Survive.</p>
+            <button class="btn" onclick="startGame()">START GAME</button>
+            <div class="controls">
+                <p><span>A/D</span> or <span>←/→</span> — Move</p>
+                <p><span>W</span> or <span>↑</span> or <span>SPACE</span> — Jump</p>
+                <p><span>J</span> or <span>Left Click</span> — Shoot</p>
+                <p><span>K</span> or <span>SHIFT</span> — Dash</p>
+                <p><span>ESC</span> — Pause</p>
+            </div>
+        </div>
+        
+        <!-- Pause -->
+        <div id="pauseOverlay" class="overlay hidden">
+            <h2>PAUSED</h2>
+            <button class="btn" onclick="resumeGame()">RESUME</button>
+            <button class="btn" onclick="quitToMenu()">QUIT</button>
+        </div>
+        
+        <!-- Game Over -->
+        <div id="gameOverOverlay" class="overlay hidden">
+            <h2>GAME OVER</h2>
+            <div class="stats">
+                <div class="final-score">Score: <span id="finalScore">0</span></div>
+                <div>Level Reached: <span id="finalLevel">1</span></div>
+                <div>Enemies Defeated: <span id="finalKills">0</span></div>
+            </div>
+            <button class="btn" onclick="startGame()">TRY AGAIN</button>
+            <button class="btn" onclick="quitToMenu()">MAIN MENU</button>
+        </div>
+        
+        <!-- Level Complete -->
+        <div id="levelOverlay" class="overlay hidden">
+            <h2 class="level-complete">LEVEL <span id="completedLevel">1</span> COMPLETE!</h2>
+            <div class="stats">
+                <div>Score: <span id="levelScore">0</span></div>
+                <div>Time Bonus: +<span id="timeBonus">0</span></div>
+            </div>
+            <button class="btn" onclick="nextLevel()">NEXT LEVEL</button>
+        </div>
+    </div>
+
+    <script>
+        // ==================== CONFIG ====================
+        const CONFIG = {
+            width: 1200,
+            height: 700,
+            gravity: 0.6,
+            friction: 0.85,
+            playerSpeed: 5,
+            jumpForce: 14,
+            bulletSpeed: 12,
+            tileSize: 40
+        };
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = CONFIG.width;
+        canvas.height = CONFIG.height;
+
+        // ==================== AUDIO ====================
+        class Audio {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.gain = this.ctx.createGain();
+                this.gain.connect(this.ctx.destination);
+                this.gain.gain.value = 0.2;
+            }
+
+            resume() {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+            }
+
+            play(type) {
+                const osc = this.ctx.createOscillator();
+                const g = this.ctx.createGain();
+                osc.connect(g);
+                g.connect(this.gain);
+
+                switch(type) {
+                    case 'shoot':
+                        osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.1);
+                        osc.type = 'square';
+                        g.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.1);
+                        break;
+                    case 'jump':
+                        osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(600, this.ctx.currentTime + 0.15);
+                        osc.type = 'sine';
+                        g.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.15);
+                        break;
+                    case 'hit':
+                        osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.2);
+                        osc.type = 'sawtooth';
+                        g.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.2);
+                        break;
+                    case 'explosion':
+                        const bufferSize = this.ctx.sampleRate * 0.2;
+                        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                        const data = buffer.getChannelData(0);
+                        for (let i = 0; i < bufferSize; i++) {
+                            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+                        }
+                        const src = this.ctx.createBufferSource();
+                        src.buffer = buffer;
+                        const filter = this.ctx.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        filter.frequency.value = 500;
+                        src.connect(filter);
+                        filter.connect(this.gain);
+                        src.start();
+                        return;
+                    case 'coin':
+                        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                        osc.frequency.setValueAtTime(1000, this.ctx.currentTime + 0.1);
+                        osc.type = 'sine';
+                        g.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.2);
+                        break;
+                    case 'dash':
+                        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.1);
+                        osc.type = 'sawtooth';
+                        g.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.1);
+                        break;
+                }
+            }
+        }
+
+        // ==================== PARTICLES ====================
+        class Particles {
+            constructor() {
+                this.list = [];
+            }
+
+            emit(x, y, count, colors, speed, size, life) {
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const spd = speed[0] + Math.random() * (speed[1] - speed[0]);
+                    this.list.push({
+                        x, y,
+                        vx: Math.cos(angle) * spd,
+                        vy: Math.sin(angle) * spd,
+                        size: size[0] + Math.random() * (size[1] - size[0]),
+                        life: life[0] + Math.random() * (life[1] - life[0]),
+                        maxLife: life[1],
+                        color: colors[Math.floor(Math.random() * colors.length)]
+                    });
+                }
+            }
+
+            update() {
+                this.list = this.list.filter(p => {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.1;
+                    p.life--;
+                    p.size *= 0.95;
+                    return p.life > 0 && p.size > 0.5;
+                });
+            }
+
+            draw(ctx, camera) {
+                this.list.forEach(p => {
+                    ctx.globalAlpha = p.life / p.maxLife;
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(p.x - camera.x - p.size/2, p.y - p.size/2, p.size, p.size);
+                });
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // ==================== PLAYER ====================
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 32;
+                this.height = 48;
+                this.vx = 0;
+                this.vy = 0;
+                this.onGround = false;
+                this.facing = 1;
+                this.health = 100;
+                this.maxHealth = 100;
+                this.lastShot = 0;
+                this.fireRate = 150;
+                this.damage = 25;
+                this.canDash = true;
+                this.dashing = 0;
+                this.dashCooldown = 0;
+                this.invulnerable = 0;
+                this.animFrame = 0;
+                this.animTimer = 0;
+            }
+
+            update(keys, level) {
+                // Horizontal movement
+                if (!this.dashing) {
+                    if (keys['KeyA'] || keys['ArrowLeft']) {
+                        this.vx = -CONFIG.playerSpeed;
+                        this.facing = -1;
+                    } else if (keys['KeyD'] || keys['ArrowRight']) {
+                        this.vx = CONFIG.playerSpeed;
+                        this.facing = 1;
+                    } else {
+                        this.vx *= CONFIG.friction;
+                    }
+                }
+
+                // Apply gravity
+                this.vy += CONFIG.gravity;
+                if (this.vy > 15) this.vy = 15;
+
+                // Dash
+                if (this.dashing > 0) {
+                    this.vx = this.facing * 20;
+                    this.vy = 0;
+                    this.dashing--;
+                }
+                if (this.dashCooldown > 0) this.dashCooldown--;
+
+                // Move and collide
+                this.x += this.vx;
+                this.collideX(level);
+                this.y += this.vy;
+                this.collideY(level);
+
+                // Invulnerability
+                if (this.invulnerable > 0) this.invulnerable--;
+
+                // Animation
+                this.animTimer++;
+                if (this.animTimer > 8) {
+                    this.animTimer = 0;
+                    this.animFrame = (this.animFrame + 1) % 4;
+                }
+
+                // Fall death
+                if (this.y > level.height * CONFIG.tileSize + 200) {
+                    this.health = 0;
+                }
+            }
+
+            collideX(level) {
+                const tiles = this.getTiles(level);
+                tiles.forEach(tile => {
+                    if (tile.solid && this.intersects(tile)) {
+                        if (this.vx > 0) {
+                            this.x = tile.x - this.width;
+                        } else if (this.vx < 0) {
+                            this.x = tile.x + CONFIG.tileSize;
+                        }
+                        this.vx = 0;
+                    }
+                });
+            }
+
+            collideY(level) {
+                this.onGround = false;
+                const tiles = this.getTiles(level);
+                tiles.forEach(tile => {
+                    if (tile.solid && this.intersects(tile)) {
+                        if (this.vy > 0) {
+                            this.y = tile.y - this.height;
+                            this.onGround = true;
+                            this.canDash = true;
+                        } else if (this.vy < 0) {
+                            this.y = tile.y + CONFIG.tileSize;
+                        }
+                        this.vy = 0;
+                    }
+                });
+            }
+
+            getTiles(level) {
+                const tiles = [];
+                const left = Math.floor(this.x / CONFIG.tileSize);
+                const right = Math.floor((this.x + this.width) / CONFIG.tileSize);
+                const top = Math.floor(this.y / CONFIG.tileSize);
+                const bottom = Math.floor((this.y + this.height) / CONFIG.tileSize);
+                
+                for (let ty = top; ty <= bottom; ty++) {
+                    for (let tx = left; tx <= right; tx++) {
+                        if (level.getTile(tx, ty) === 1) {
+                            tiles.push({
+                                x: tx * CONFIG.tileSize,
+                                y: ty * CONFIG.tileSize,
+                                solid: true
+                            });
+                        }
+                    }
+                }
+                return tiles;
+            }
+
+            intersects(tile) {
+                return this.x < tile.x + CONFIG.tileSize &&
+                       this.x + this.width > tile.x &&
+                       this.y < tile.y + CONFIG.tileSize &&
+                       this.y + this.height > tile.y;
+            }
+
+            jump(audio) {
+                if (this.onGround) {
+                    this.vy = -CONFIG.jumpForce;
+                    this.onGround = false;
+                    audio.play('jump');
+                }
+            }
+
+            dash(audio) {
+                if (this.canDash && this.dashCooldown === 0) {
+                    this.dashing = 8;
+                    this.dashCooldown = 45;
+                    this.canDash = false;
+                    this.invulnerable = 10;
+                    audio.play('dash');
+                }
+            }
+
+            shoot(bullets, audio) {
+                const now = Date.now();
+                if (now - this.lastShot >= this.fireRate) {
+                    this.lastShot = now;
+                    bullets.push({
+                        x: this.x + this.width/2 + this.facing * 20,
+                        y: this.y + this.height/2 - 5,
+                        vx: this.facing * CONFIG.bulletSpeed,
+                        vy: 0,
+                        damage: this.damage,
+                        size: 8,
+                        color: '#0ff',
+                        player: true
+                    });
+                    audio.play('shoot');
+                }
+            }
+
+            takeDamage(amount, audio) {
+                if (this.invulnerable > 0) return;
+                this.health -= amount;
+                this.invulnerable = 60;
+                audio.play('hit');
+            }
+
+            draw(ctx, camera) {
+                ctx.save();
+                const sx = this.x - camera.x;
+                const sy = this.y;
+
+                // Flash when invulnerable
+                if (this.invulnerable > 0 && Math.floor(this.invulnerable / 4) % 2 === 0) {
+                    ctx.globalAlpha = 0.5;
+                }
+
+                // Dash trail
+                if (this.dashing > 0) {
+                    ctx.fillStyle = 'rgba(0, 255, 255, 0.3)';
+                    ctx.fillRect(sx - this.facing * 20, sy, this.width, this.height);
+                    ctx.fillStyle = 'rgba(0, 255, 255, 0.15)';
+                    ctx.fillRect(sx - this.facing * 40, sy, this.width, this.height);
+                }
+
+                // Body
+                ctx.fillStyle = '#1a1a2e';
+                ctx.fillRect(sx, sy, this.width, this.height);
+
+                // Visor
+                ctx.fillStyle = '#0ff';
+                const visorX = this.facing === 1 ? sx + 10 : sx + 6;
+                ctx.fillRect(visorX, sy + 8, 16, 6);
+
+                // Arm/Gun
+                ctx.fillStyle = '#444';
+                const armY = sy + this.height/2 - 4;
+                if (this.facing === 1) {
+                    ctx.fillRect(sx + this.width - 5, armY, 15, 8);
+                    ctx.fillStyle = '#0ff';
+                    ctx.fillRect(sx + this.width + 8, armY + 2, 6, 4);
+                } else {
+                    ctx.fillRect(sx - 10, armY, 15, 8);
+                    ctx.fillStyle = '#0ff';
+                    ctx.fillRect(sx - 14, armY + 2, 6, 4);
+                }
+
+                // Legs (animated)
+                ctx.fillStyle = '#333';
+                const legOffset = Math.abs(this.vx) > 0.5 ? Math.sin(this.animFrame * 0.8) * 5 : 0;
+                ctx.fillRect(sx + 4, sy + this.height - 12, 10, 12 + legOffset);
+                ctx.fillRect(sx + this.width - 14, sy + this.height - 12, 10, 12 - legOffset);
+
+                // Jetpack glow when dashing
+                if (this.dashing > 0) {
+                    ctx.fillStyle = '#f80';
+                    ctx.beginPath();
+                    ctx.arc(sx + this.width/2 - this.facing * 5, sy + this.height - 5, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // ==================== ENEMY ====================
+        class Enemy {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.vx = 0;
+                this.vy = 0;
+                this.facing = -1;
+                this.lastShot = 0;
+                
+                switch(type) {
+                    case 'walker':
+                        this.width = 36;
+                        this.height = 40;
+                        this.health = 50;
+                        this.speed = 1.5;
+                        this.damage = 15;
+                        this.score = 100;
+                        this.color = '#f44';
+                        this.shootRate = 2000;
+                        break;
+                    case 'flyer':
+                        this.width = 40;
+                        this.height = 30;
+                        this.health = 30;
+                        this.speed = 2;
+                        this.damage = 10;
+                        this.score = 150;
+                        this.color = '#fa0';
+                        this.shootRate = 1500;
+                        this.floatOffset = Math.random() * Math.PI * 2;
+                        break;
+                    case 'tank':
+                        this.width = 50;
+                        this.height = 50;
+                        this.health = 150;
+                        this.speed = 0.8;
+                        this.damage = 25;
+                        this.score = 300;
+                        this.color = '#a4f';
+                        this.shootRate = 1000;
+                        break;
+                }
+                
+                this.maxHealth = this.health;
+            }
+
+            update(player, level, bullets, audio) {
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                this.facing = dx > 0 ? 1 : -1;
+                
+                if (this.type === 'flyer') {
+                    // Float and approach
+                    this.floatOffset += 0.05;
+                    if (dist > 200) {
+                        this.x += (dx / dist) * this.speed;
+                    }
+                    this.y += Math.sin(this.floatOffset) * 1.5;
+                } else {
+                    // Walk
+                    this.vy += CONFIG.gravity;
+                    if (dist < 400) {
+                        this.vx = this.facing * this.speed;
+                    } else {
+                        this.vx *= 0.9;
+                    }
+                    
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    
+                    // Simple ground collision
+                    const tileBelow = level.getTile(
+                        Math.floor((this.x + this.width/2) / CONFIG.tileSize),
+                        Math.floor((this.y + this.height + 1) / CONFIG.tileSize)
+                    );
+                    if (tileBelow === 1) {
+                        this.y = Math.floor((this.y + this.height) / CONFIG.tileSize) * CONFIG.tileSize - this.height;
+                        this.vy = 0;
+                    }
+                }
+                
+                // Shooting
+                const now = Date.now();
+                if (dist < 500 && now - this.lastShot >= this.shootRate) {
+                    this.lastShot = now;
+                    const angle = Math.atan2(dy, dx);
+                    bullets.push({
+                        x: this.x + this.width/2,
+                        y: this.y + this.height/2,
+                        vx: Math.cos(angle) * 6,
+                        vy: Math.sin(angle) * 6,
+                        damage: this.damage,
+                        size: 6,
+                        color: this.color,
+                        player: false
+                    });
+                }
+            }
+
+            takeDamage(amount) {
+                this.health -= amount;
+                return this.health <= 0;
+            }
+
+            draw(ctx, camera) {
+                const sx = this.x - camera.x;
+                const sy = this.y;
+                
+                // Body
+                ctx.fillStyle = '#1a0a1a';
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 2;
+                
+                if (this.type === 'flyer') {
+                    // Drone style
+                    ctx.beginPath();
+                    ctx.ellipse(sx + this.width/2, sy + this.height/2, this.width/2, this.height/2, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    // Eye
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(sx + this.width/2 + this.facing * 8, sy + this.height/2, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Propellers
+                    ctx.fillStyle = '#666';
+                    ctx.fillRect(sx - 5, sy + 5, 10, 4);
+                    ctx.fillRect(sx + this.width - 5, sy + 5, 10, 4);
+                } else {
+                    // Robot style
+                    ctx.fillRect(sx, sy, this.width, this.height);
+                    ctx.strokeRect(sx, sy, this.width, this.height);
+                    
+                    // Eye
+                    ctx.fillStyle = this.color;
+                    const eyeX = this.facing === 1 ? sx + this.width - 15 : sx + 5;
+                    ctx.fillRect(eyeX, sy + 10, 10, 6);
+                    
+                    // Legs
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(sx + 5, sy + this.height - 8, 12, 8);
+                    ctx.fillRect(sx + this.width - 17, sy + this.height - 8, 12, 8);
+                }
+                
+                // Health bar
+                const hpPercent = this.health / this.maxHealth;
+                ctx.fillStyle = '#400';
+                ctx.fillRect(sx, sy - 8, this.width, 4);
+                ctx.fillStyle = this.color;
+                ctx.fillRect(sx, sy - 8, this.width * hpPercent, 4);
+            }
+        }
+
+        // ==================== LEVEL ====================
+        class Level {
+            constructor(num) {
+                this.num = num;
+                this.width = 60 + num * 10;
+                this.height = 17;
+                this.tiles = [];
+                this.enemies = [];
+                this.coins = [];
+                this.exit = null;
+                this.generate();
+            }
+
+            generate() {
+                // Initialize with empty
+                for (let y = 0; y < this.height; y++) {
+                    this.tiles[y] = [];
+                    for (let x = 0; x < this.width; x++) {
+                        this.tiles[y][x] = 0;
+                    }
+                }
+                
+                // Ground
+                for (let x = 0; x < this.width; x++) {
+                    this.tiles[this.height - 1][x] = 1;
+                    this.tiles[this.height - 2][x] = 1;
+                }
+                
+                // Platforms
+                let lastPlatformY = this.height - 3;
+                for (let x = 8; x < this.width - 10; x += 4 + Math.floor(Math.random() * 4)) {
+                    const platformY = Math.max(4, Math.min(this.height - 4, lastPlatformY + Math.floor(Math.random() * 7) - 3));
+                    const platformLen = 3 + Math.floor(Math.random() * 5);
+                    
+                    for (let px = 0; px < platformLen && x + px < this.width - 5; px++) {
+                        this.tiles[platformY][x + px] = 1;
+                    }
+                    
+                    // Maybe add enemy on platform
+                    if (Math.random() < 0.4) {
+                        const types = ['walker', 'walker', 'flyer', 'tank'];
+                        const type = types[Math.floor(Math.random() * (this.num > 2 ? types.length : 2))];
+                        this.enemies.push(new Enemy(
+                            (x + 1) * CONFIG.tileSize,
+                            (platformY - 2) * CONFIG.tileSize,
+                            type
+                        ));
+                    }
+                    
+                    // Coins on platform
+                    if (Math.random() < 0.6) {
+                        this.coins.push({
+                            x: (x + platformLen/2) * CONFIG.tileSize,
+                            y: (platformY - 1) * CONFIG.tileSize,
+                            collected: false
+                        });
+                    }
+                    
+                    lastPlatformY = platformY;
+                }
+                
+                // Walls
+                for (let y = 0; y < this.height; y++) {
+                    this.tiles[y][0] = 1;
+                    this.tiles[y][this.width - 1] = 1;
+                }
+                
+                // Ground enemies
+                for (let x = 15; x < this.width - 15; x += 8 + Math.floor(Math.random() * 10)) {
+                    if (Math.random() < 0.5) {
+                        this.enemies.push(new Enemy(
+                            x * CONFIG.tileSize,
+                            (this.height - 4) * CONFIG.tileSize,
+                            Math.random() < 0.7 ? 'walker' : 'tank'
+                        ));
+                    }
+                }
+                
+                // Exit
+                this.exit = {
+                    x: (this.width - 4) * CONFIG.tileSize,
+                    y: (this.height - 4) * CONFIG.tileSize,
+                    width: CONFIG.tileSize * 2,
+                    height: CONFIG.tileSize * 2
+                };
+            }
+
+            getTile(x, y) {
+                if (y < 0 || y >= this.height || x < 0 || x >= this.width) return 0;
+                return this.tiles[y][x];
+            }
+
+            draw(ctx, camera) {
+                const startX = Math.floor(camera.x / CONFIG.tileSize);
+                const endX = startX + Math.ceil(CONFIG.width / CONFIG.tileSize) + 1;
+                
+                // Background gradient
+                const bgGrad = ctx.createLinearGradient(0, 0, 0, CONFIG.height);
+                bgGrad.addColorStop(0, '#0a0a1a');
+                bgGrad.addColorStop(1, '#1a1a3a');
+                ctx.fillStyle = bgGrad;
+                ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
+                
+                // Background buildings (parallax)
+                ctx.fillStyle = '#151525';
+                for (let i = 0; i < 15; i++) {
+                    const bx = (i * 150 - camera.x * 0.3) % (CONFIG.width + 300) - 100;
+                    const bh = 100 + Math.sin(i * 2.5) * 80;
+                    ctx.fillRect(bx, CONFIG.height - bh, 80, bh);
+                    ctx.fillStyle = '#1a1a2a';
+                    ctx.fillRect(bx + 10, CONFIG.height - bh + 10, 15, 15);
+                    ctx.fillRect(bx + 35, CONFIG.height - bh + 10, 15, 15);
+                    ctx.fillRect(bx + 55, CONFIG.height - bh + 10, 15, 15);
+                    ctx.fillStyle = '#151525';
+                }
+                
+                // Tiles
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = startX; x <= endX && x < this.width; x++) {
+                        if (x < 0) continue;
+                        if (this.tiles[y][x] === 1) {
+                            const sx = x * CONFIG.tileSize - camera.x;
+                            const sy = y * CONFIG.tileSize;
+                            
+                            // Tile gradient
+                            const tileGrad = ctx.createLinearGradient(sx, sy, sx, sy + CONFIG.tileSize);
+                            tileGrad.addColorStop(0, '#2a2a4a');
+                            tileGrad.addColorStop(1, '#1a1a2a');
+                            ctx.fillStyle = tileGrad;
+                            ctx.fillRect(sx, sy, CONFIG.tileSize, CONFIG.tileSize);
+                            
+                            // Border
+                            ctx.strokeStyle = '#3a3a5a';
+                            ctx.lineWidth = 1;
+                            ctx.strokeRect(sx, sy, CONFIG.tileSize, CONFIG.tileSize);
+                            
+                            // Top highlight if no tile above
+                            if (this.getTile(x, y - 1) !== 1) {
+                                ctx.fillStyle = '#f0f';
+                                ctx.fillRect(sx, sy, CONFIG.tileSize, 3);
+                            }
+                        }
+                    }
+                }
+                
+                // Coins
+                this.coins.forEach(coin => {
+                    if (coin.collected) return;
+                    const cx = coin.x - camera.x;
+                    const cy = coin.y + Math.sin(Date.now() * 0.005 + coin.x) * 5;
+                    
+                    ctx.fillStyle = '#ff0';
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#fa0';
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                
+                // Exit
+                ctx.fillStyle = '#0f04';
+                ctx.fillRect(this.exit.x - camera.x, this.exit.y, this.exit.width, this.exit.height);
+                ctx.strokeStyle = '#0f0';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(this.exit.x - camera.x, this.exit.y, this.exit.width, this.exit.height);
+                
+                ctx.fillStyle = '#0f0';
+                ctx.font = 'bold 16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('EXIT', this.exit.x - camera.x + this.exit.width/2, this.exit.y + this.exit.height/2 + 6);
+            }
+        }
+
+        // ==================== GAME STATE ====================
+        let audio;
+        let gameState = 'menu';
+        let player;
+        let level;
+        let bullets = [];
+        let particles;
+        let camera = { x: 0 };
+        let score = 0;
+        let kills = 0;
+        let levelNum = 1;
+        let levelStartTime = 0;
+
+        const keys = {};
+
+        document.addEventListener('keydown', e => {
+            keys[e.code] = true;
+            
+            if (gameState === 'playing') {
+                if (e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'Space') {
+                    player.jump(audio);
+                }
+                if (e.code === 'KeyK' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                    player.dash(audio);
+                }
+            }
+            
+            if (e.code === 'Escape') {
+                if (gameState === 'playing') pauseGame();
+                else if (gameState === 'paused') resumeGame();
+            }
+        });
+
+        document.addEventListener('keyup', e => {
+            keys[e.code] = false;
+        });
+
+        canvas.addEventListener('mousedown', e => {
+            if (e.button === 0 && gameState === 'playing') {
+                keys['shoot'] = true;
+            }
+            if (audio) audio.resume();
+        });
+
+        canvas.addEventListener('mouseup', e => {
+            if (e.button === 0) keys['shoot'] = false;
+        });
+
+        function startGame() {
+            if (!audio) audio = new Audio();
+            audio.resume();
+            
+            gameState = 'playing';
+            levelNum = 1;
+            score = 0;
+            kills = 0;
+            loadLevel(levelNum);
+            
+            hideAllOverlays();
+        }
+
+        function loadLevel(num) {
+            level = new Level(num);
+            player = new Player(100, (level.height - 5) * CONFIG.tileSize);
+            bullets = [];
+            particles = new Particles();
+            camera.x = 0;
+            levelStartTime = Date.now();
+        }
+
+        function nextLevel() {
+            levelNum++;
+            loadLevel(levelNum);
+            hideAllOverlays();
+            gameState = 'playing';
+        }
+
+        function pauseGame() {
+            gameState = 'paused';
+            document.getElementById('pauseOverlay').classList.remove('hidden');
+        }
+
+        function resumeGame() {
+            gameState = 'playing';
+            document.getElementById('pauseOverlay').classList.add('hidden');
+        }
+
+        function quitToMenu() {
+            gameState = 'menu';
+            hideAllOverlays();
+            document.getElementById('menuOverlay').classList.remove('hidden');
+        }
+
+        function gameOver() {
+            gameState = 'gameover';
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('finalLevel').textContent = levelNum;
+            document.getElementById('finalKills').textContent = kills;
+            document.getElementById('gameOverOverlay').classList.remove('hidden');
+        }
+
+        function levelComplete() {
+            gameState = 'levelcomplete';
+            const timeBonus = Math.max(0, 5000 - (Date.now() - levelStartTime) / 10);
+            score += Math.floor(timeBonus);
+            
+            document.getElementById('completedLevel').textContent = levelNum;
+            document.getElementById('levelScore').textContent = score;
+            document.getElementById('timeBonus').textContent = Math.floor(timeBonus);
+            document.getElementById('levelOverlay').classList.remove('hidden');
+        }
+
+        function hideAllOverlays() {
+            document.querySelectorAll('.overlay').forEach(o => o.classList.add('hidden'));
+        }
+
+        // ==================== MAIN LOOP ====================
+        function update() {
+            if (gameState !== 'playing') return;
+            
+            // Player
+            player.update(keys, level);
+            
+            // Shooting
+            if (keys['KeyJ'] || keys['shoot']) {
+                player.shoot(bullets, audio);
+            }
+            
+            // Camera follow
+            const targetX = player.x - CONFIG.width / 3;
+            camera.x += (targetX - camera.x) * 0.1;
+            camera.x = Math.max(0, Math.min(level.width * CONFIG.tileSize - CONFIG.width, camera.x));
+            
+            // Enemies
+            level.enemies.forEach(enemy => {
+                enemy.update(player, level, bullets, audio);
+            });
+            
+            // Bullets
+            bullets.forEach((bullet, bi) => {
+                bullet.x += bullet.vx;
+                bullet.y += bullet.vy;
+                if (!bullet.player) bullet.vy += 0.1; // Enemy bullets have gravity
+                
+                // Out of bounds
+                if (bullet.x < camera.x - 50 || bullet.x > camera.x + CONFIG.width + 50 ||
+                    bullet.y < -50 || bullet.y > CONFIG.height + 50) {
+                    bullets.splice(bi, 1);
+                    return;
+                }
+                
+                // Hit tiles
+                const tx = Math.floor(bullet.x / CONFIG.tileSize);
+                const ty = Math.floor(bullet.y / CONFIG.tileSize);
+                if (level.getTile(tx, ty) === 1) {
+                    particles.emit(bullet.x, bullet.y, 5, [bullet.color, '#fff'], [1, 3], [2, 4], [10, 20]);
+                    bullets.splice(bi, 1);
+                    return;
+                }
+                
+                if (bullet.player) {
+                    // Player bullets hit enemies
+                    level.enemies.forEach((enemy, ei) => {
+                        if (bullet.x > enemy.x && bullet.x < enemy.x + enemy.width &&
+                            bullet.y > enemy.y && bullet.y < enemy.y + enemy.height) {
+                            bullets.splice(bi, 1);
+                            if (enemy.takeDamage(bullet.damage)) {
+                                particles.emit(enemy.x + enemy.width/2, enemy.y + enemy.height/2, 20, 
+                                    [enemy.color, '#ff0', '#fff'], [2, 6], [3, 8], [20, 40]);
+                                audio.play('explosion');
+                                score += enemy.score;
+                                kills++;
+                                level.enemies.splice(ei, 1);
+                            } else {
+                                particles.emit(bullet.x, bullet.y, 8, [enemy.color, '#fff'], [1, 3], [2, 4], [10, 20]);
+                            }
+                        }
+                    });
+                } else {
+                    // Enemy bullets hit player
+                    if (bullet.x > player.x && bullet.x < player.x + player.width &&
+                        bullet.y > player.y && bullet.y < player.y + player.height) {
+                        player.takeDamage(bullet.damage, audio);
+                        particles.emit(bullet.x, bullet.y, 10, ['#f00', '#ff0'], [1, 4], [2, 5], [15, 30]);
+                        bullets.splice(bi, 1);
+                    }
+                }
+            });
+            
+            // Coins
+            level.coins.forEach(coin => {
+                if (coin.collected) return;
+                const dx = player.x + player.width/2 - coin.x;
+                const dy = player.y + player.height/2 - coin.y;
+                if (Math.sqrt(dx*dx + dy*dy) < 30) {
+                    coin.collected = true;
+                    score += 50;
+                    audio.play('coin');
+                    particles.emit(coin.x, coin.y, 10, ['#ff0', '#fa0'], [1, 3], [2, 5], [15, 25]);
+                }
+            });
+            
+            // Enemy collision with player
+            level.enemies.forEach(enemy => {
+                if (player.x < enemy.x + enemy.width &&
+                    player.x + player.width > enemy.x &&
+                    player.y < enemy.y + enemy.height &&
+                    player.y + player.height > enemy.y) {
+                    player.takeDamage(enemy.damage, audio);
+                }
+            });
+            
+            // Exit
+            if (player.x < level.exit.x + level.exit.width &&
+                player.x + player.width > level.exit.x &&
+                player.y < level.exit.y + level.exit.height &&
+                player.y + player.height > level.exit.y) {
+                levelComplete();
+            }
+            
+            // Death
+            if (player.health <= 0) {
+                particles.emit(player.x + player.width/2, player.y + player.height/2, 40,
+                    ['#0ff', '#f0f', '#fff'], [2, 8], [3, 10], [30, 60]);
+                audio.play('explosion');
+                gameOver();
+            }
+            
+            particles.update();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, CONFIG.width, CONFIG.height);
+            
+            if (level) {
+                level.draw(ctx, camera);
+                level.enemies.forEach(e => e.draw(ctx, camera));
+            }
+            
+            if (player && gameState !== 'menu') {
+                player.draw(ctx, camera);
+            }
+            
+            // Bullets
+            bullets.forEach(bullet => {
+                ctx.fillStyle = bullet.color;
+                ctx.shadowColor = bullet.color;
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.arc(bullet.x - camera.x, bullet.y, bullet.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+            
+            if (particles) particles.draw(ctx, camera);
+            
+            // HUD
+            if (gameState === 'playing' || gameState === 'paused') {
+                drawHUD();
+            }
+        }
+
+        function drawHUD() {
+            // Health bar
+            ctx.fillStyle = '#400';
+            ctx.fillRect(20, 20, 200, 20);
+            ctx.fillStyle = '#0f0';
+            ctx.fillRect(20, 20, 200 * (player.health / player.maxHealth), 20);
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(20, 20, 200, 20);
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`HP: ${Math.ceil(player.health)}/${player.maxHealth}`, 25, 35);
+            
+            // Dash cooldown
+            const dashReady = player.dashCooldown === 0;
+            ctx.fillStyle = dashReady ? '#0ff' : '#444';
+            ctx.fillText(`DASH: ${dashReady ? 'READY' : Math.ceil(player.dashCooldown / 60 * 10) / 10 + 's'}`, 20, 55);
+            
+            // Score
+            ctx.textAlign = 'right';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillStyle = '#ff0';
+            ctx.fillText(`Score: ${score}`, CONFIG.width - 20, 35);
+            
+            // Level
+            ctx.fillStyle = '#0ff';
+            ctx.fillText(`Level: ${levelNum}`, CONFIG.width - 20, 60);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
