@@ -1,0 +1,11 @@
+# Changelog
+
+## 2026-02-09
+- Added YouTube Shorts pipeline (Ken Burns + ambient music)
+- Uploaded 3 new shorts: Cosmic Journey, Ancient Ruins, Deep Ocean Wonders
+
+## 2026-02-08
+- Added Cyber Runner & Gravity Flip web games
+
+## 2026-02-07
+- YouTube channel setup & video uploads
