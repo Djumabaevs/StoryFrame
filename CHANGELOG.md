@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-02-11
+- Routine maintenance & formatting cleanup
+
 ## 2026-02-09
 - Added YouTube Shorts pipeline (Ken Burns + ambient music)
 - Uploaded 3 new shorts: Cosmic Journey, Ancient Ruins, Deep Ocean Wonders
