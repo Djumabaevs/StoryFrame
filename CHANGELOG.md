@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-02-13
+- Friday the 13th commit 🖤 — routine maintenance
+
 ## 2026-02-12
 - Midday check-in: project alive and well 🌿
 
