@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-02-15
+- Sunday maintenance — code cleanup & formatting
+
 ## 2026-02-14
 - Valentine's Day commit 💕 — daily maintenance
 
