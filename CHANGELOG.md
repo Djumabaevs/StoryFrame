@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-02-18
+- Midday update — project structure check ✨
+
 ## 2026-02-17
 - Tuesday noon sync — keeping the streak alive ☀️
 
