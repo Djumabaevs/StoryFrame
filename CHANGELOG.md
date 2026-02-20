@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-02-20
+- Friday noon sync — weekly streak continues 🔥
+
 ## 2026-02-18
 - Midday update — project structure check ✨
 
