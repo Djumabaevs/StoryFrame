@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-02-22
+- Sunday noon sync — weekly wrap-up 🌤️
+
 ## 2026-02-21
 - Saturday maintenance commit 🛠️
 
