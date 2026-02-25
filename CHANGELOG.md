@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-02-25
+- Wednesday noon sync — midweek check-in 🌿
+
 ## 2026-02-24
 - Tuesday noon sync — midweek momentum 🚀
 
