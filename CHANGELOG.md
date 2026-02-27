@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-02-27
+- Friday noon sync — end of week check-in 🎉
+
 ## 2026-02-26
 - Thursday noon sync — keeping the streak alive 📅
 
