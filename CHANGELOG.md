@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-02-28
+- Saturday noon sync — weekend vibes 🌸
+
 ## 2026-02-27
 - Friday noon sync — end of week check-in 🎉
 
