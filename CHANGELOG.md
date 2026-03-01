@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-03-01
+- Sunday sync — hello March! 🌷
+
 ## 2026-02-28
 - Saturday noon sync — weekend vibes 🌸
 
