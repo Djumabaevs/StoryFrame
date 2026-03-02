@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-03-02
+- Monday sync — new week energy ⚡
+
 ## 2026-03-01
 - Sunday sync — hello March! 🌷
 
