@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-03-06
+- Friday sync — end of week vibes 🎶
+
 ## 2026-03-03
 - Tuesday sync — midweek momentum 🚀
 
