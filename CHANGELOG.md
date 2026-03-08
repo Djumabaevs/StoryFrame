@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-03-08
+- Sunday sync — women's day edition 🌸💐
+
 ## 2026-03-07
 - Saturday sync — weekend chill mode 🧊
 
