@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-03-09
+- Monday sync — new week, fresh start 🌿
+
 ## 2026-03-08
 - Sunday sync — women's day edition 🌸💐
 
