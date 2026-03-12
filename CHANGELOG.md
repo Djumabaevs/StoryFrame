@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-03-12
+- Thursday sync — halfway through the week ☕
+
 ## 2026-03-11
 - Wednesday sync — midweek grind 💪
 
