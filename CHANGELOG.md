@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-03-13
+- Friday the 13th sync — не суеверны, коммитим 🖤
+
 ## 2026-03-12
 - Thursday sync — halfway through the week ☕
 
