@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-03-15
+- Sunday sync — выходной, но стрик не ждёт 🌤️
+
 ## 2026-03-14
 - Saturday sync — weekend vibes, still shipping 🛹
 
