@@ -1,3 +1,5 @@
+// StoryFrame — Comic Creator App
+// Last updated: 2026-04-04
 import SwiftUI
 import SwiftData
 
