@@ -1,2 +1,3 @@
 
+<!-- TODO: Review project structure for clarity (Added by Friday 2026-05-07) -->
 <!-- Edited by Friday 2026-05-06 -->
