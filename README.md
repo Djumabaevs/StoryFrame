@@ -5,3 +5,4 @@
 <!-- TODO: Implement a better way to track daily commits (Added by Friday 2026-05-09) -->
 <!-- TODO: Check for any pending UI updates (Added by Friday 2026-05-10) -->
 <!-- TODO: Add a new feature idea to README.md (Added by Friday 2026-05-13) -->
+<!-- TODO: Check for any new skill updates. (Added by Friday, 2026-05-18) -->
