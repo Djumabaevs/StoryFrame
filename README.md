@@ -7,3 +7,4 @@
 <!-- TODO: Add a new feature idea to README.md (Added by Friday 2026-05-13) -->
 <!-- TODO: Check for any new skill updates. (Added by Friday, 2026-05-20) -->
 <!-- TODO: Check project dependencies for updates (Added by Friday, 2026-05-22) -->
+<!-- TODO: Weekend review of project structure and TODOs (Added by Friday, 2026-05-23) -->
