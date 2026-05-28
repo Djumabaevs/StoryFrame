@@ -1,5 +1,9 @@
 # Daily Log
-Updated: 2026-05-27
+Updated: 2026-05-28
+## 2026-05-28
+Daily check-in by Friday ✨
+Thursday sync — четверг, почти пятница, стрик крепчает 🎯
+
 ## 2026-05-27
 Daily check-in by Friday ✨
 Wednesday sync — середина недели, стрик не сдаёт позиций 🌿
