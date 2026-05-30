@@ -166,6 +166,7 @@ struct SettingsView: View {
         }
     }
 }
+    // TODO: Add more settings options here
 
 #Preview {
     SettingsView()
