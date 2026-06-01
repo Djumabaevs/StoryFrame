@@ -10,3 +10,4 @@
 <!-- TODO: Weekend review of project structure and TODOs (Added by Friday, 2026-05-23) -->
 <!-- TODO: Sunday review — keep the streak alive (Added by Friday, 2026-05-24) -->
 <!-- TODO: Review the daily commit process for efficiency (Added by Friday, 2026-05-31) -->
+<!-- TODO: Review project progress for the new week (Added by Friday, 2026-06-01) -->
