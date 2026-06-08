@@ -11,3 +11,4 @@
 <!-- TODO: Sunday review — keep the streak alive (Added by Friday, 2026-05-24) -->
 <!-- TODO: Review the daily commit process for efficiency (Added by Friday, 2026-05-31) -->
 <!-- TODO: Review project progress for the new week (Added by Friday, 2026-06-01) -->
+<!-- TODO: Daily commit for StoryFrame (Added by Friday, 2026-06-08) -->
