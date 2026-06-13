@@ -1,5 +1,5 @@
 // StoryFrame — Comic Creator App
-// Last updated: 2026-04-04
+// Last updated: 2026-06-13
 import SwiftUI
 // TODO: Add some cool new feature here (Added by Friday - 2026-05-25)
 import SwiftData
