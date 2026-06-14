@@ -1,8 +1,9 @@
 // StoryFrame — Comic Creator App
-// Last updated: 2026-06-13
+// Last updated: 2026-06-14
 import SwiftUI
 // TODO: Add some cool new feature here (Added by Friday - 2026-05-25)
 import SwiftData
+// Minor formatting update by Friday for daily commit.
 
 @main
 struct StoryFrameApp: App {
