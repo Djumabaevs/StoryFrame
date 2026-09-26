@@ -29,6 +29,7 @@
 
 ## 2026-09-17
 - Thursday sync — четверг, финиш недели уже близко, стрик уверенно держит темп 🎯
+- Backfill — the scheduled run did not fire this day; the entry above came in with the 09-18 sync 🎯
 
 ## 2026-09-16
 - Wednesday sync — среда, середина недели, стрик уверенно движется дальше 🌿
