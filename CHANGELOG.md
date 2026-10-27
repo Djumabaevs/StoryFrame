@@ -698,6 +698,7 @@ Status: Active development
 
 ## 2026-10-23
 - Friday sync — пятница, конец недели, стрик жив и крепок 🌼
+- Late backfill marker — отдельный коммит для пятницы 🌼
 
 ## 2026-10-24
 - Saturday sync — суббота, выходной, но стрик идёт дальше 🌸
